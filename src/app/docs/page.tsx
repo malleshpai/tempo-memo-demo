@@ -136,6 +136,26 @@ function DocsContent() {
           </div>
         </div>
 
+        
+
+        <div className="card">
+          <div style={{ fontWeight: 600 }}>Deployed addresses (Tempo Testnet)</div>
+          <div className="stack-sm" style={{ marginTop: 8 }}>
+            <div>
+              <span style={{ fontWeight: 600 }}>PublicKeyRegistry</span> —
+              <a href="https://explore.tempo.xyz/address/0x02F64DEbd94560Bfb29B0c12246819AD4388156d" target="_blank" rel="noreferrer">
+                0x02F64DEbd94560Bfb29B0c12246819AD4388156d
+              </a>
+            </div>
+            <div>
+              <span style={{ fontWeight: 600 }}>MemoStore</span> —
+              <a href="https://explore.tempo.xyz/address/0x639223E5224Eae37e68FC390974bFB88Be7422B8" target="_blank" rel="noreferrer">
+                0x639223E5224Eae37e68FC390974bFB88Be7422B8
+              </a>
+            </div>
+          </div>
+        </div>
+
         <div className="card">
           <div style={{ fontWeight: 600 }}>Smart contracts</div>
           <div className="stack-sm" style={{ marginTop: 8 }}>
