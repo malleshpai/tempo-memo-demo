@@ -6,7 +6,7 @@ import { buildMemoAccessMessage, isValidMemoId, MemoRecord } from '../../../../.
 async function loadRecord(memoId: string) {
   const result = await list({ prefix: `memos/${memoId}/record.json` })
   if (!result.blobs.length) return null
-  const latest = [...result.blobs].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0]
+  const latest = [...result.blobs].sort((a, b) => (new Date(b.uploadedAt).getTime()) - (new Date(a.uploadedAt).getTime()))[0]
   const response = await fetch(latest.downloadUrl)
   if (!response.ok) return null
   return (await response.json()) as MemoRecord
