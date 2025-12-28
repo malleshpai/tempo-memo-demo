@@ -1,10 +1,11 @@
 'use client'
 
 import React from 'react'
-import { useConnection, usePublicClient, useWriteContract } from 'wagmi'
-import { waitForTransactionReceipt } from 'wagmi/actions'
+import { useConnection, usePublicClient } from 'wagmi'
+import { getConnectorClient, waitForTransactionReceipt } from 'wagmi/actions'
 import { tempoTestnet } from 'viem/chains'
 import { hexToString, isAddress } from 'viem'
+import { writeContract } from 'viem/actions'
 import { isValidMemoId, MemoRecord } from '../lib/memo'
 import { decryptDataKey, decryptPayload, importPrivateKey, loadPrivateKey } from '../lib/crypto'
 import { MEMO_STORE_ADDRESS, memoStoreAbi } from '../lib/contracts'
@@ -23,7 +24,6 @@ type MemoResponse = Pick<
 export function MemoViewer({ memoId }: MemoViewerProps) {
   const { address } = useConnection()
   const publicClient = usePublicClient()
-  const { writeContractAsync } = useWriteContract()
   const [isLoading, setIsLoading] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -154,13 +154,15 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
     setError(null)
     setActionStatus('Deleting onchain memo…')
     try {
-      const hash = await writeContractAsync({
+      const client = await getConnectorClient(wagmiConfig, {
+        account: address as `0x${string}`
+      })
+      const hash = await writeContract(client, {
         address: memoStoreAddress,
         abi: memoStoreAbi,
         functionName: 'deleteMemo',
         args: [memoId as `0x${string}`],
         gas: BigInt(250000),
-        account: address as `0x${string}`,
       })
       setActionStatus('Waiting for confirmation…')
       await waitForTransactionReceipt(wagmiConfig, { hash })
