@@ -9,6 +9,7 @@ import { MEMO_STORE_ADDRESS, REGULATOR_ADDRESS, REGULATOR_PRIVATE_KEY_JWK, memoS
 import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
 
 const REGULATOR_PASSWORD = 'Iamtheregulator'
+const STORAGE_KEY = 'tempo-regulator-memos'
 
 type RegulatorMemo = {
   memoId: `0x${string}`
@@ -31,6 +32,28 @@ const safeIsoDate = (value?: string) => {
   return new Date().toISOString()
 }
 
+const readHistory = () => {
+  if (typeof window === 'undefined') return [] as RegulatorMemo[]
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed as RegulatorMemo[]
+  } catch {
+    return [] as RegulatorMemo[]
+  }
+}
+
+const writeHistory = (items: RegulatorMemo[]) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
 export function RegulatorPanel() {
   const publicClient = usePublicClient()
   const [password, setPassword] = React.useState('')
@@ -39,6 +62,8 @@ export function RegulatorPanel() {
   const [status, setStatus] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [data, setData] = React.useState<RegulatorMemo | null>(null)
+  const [history, setHistory] = React.useState<RegulatorMemo[]>([])
+  const historyLoaded = React.useRef(false)
 
   const regulatorKey = React.useMemo(() => {
     if (!REGULATOR_PRIVATE_KEY_JWK) return null
@@ -49,6 +74,17 @@ export function RegulatorPanel() {
     }
   }, [])
 
+  React.useEffect(() => {
+    if (!isUnlocked || historyLoaded.current) return
+    historyLoaded.current = true
+    setHistory(readHistory())
+  }, [isUnlocked])
+
+  React.useEffect(() => {
+    if (!isUnlocked) return
+    writeHistory(history)
+  }, [history, isUnlocked])
+
   const unlock = () => {
     setError(null)
     if (password !== REGULATOR_PASSWORD) {
@@ -57,6 +93,13 @@ export function RegulatorPanel() {
     }
     setIsUnlocked(true)
     setPassword('')
+  }
+
+  const openFromHistory = (memo: RegulatorMemo) => {
+    setMemoId(memo.memoId)
+    setData(memo)
+    setError(null)
+    setStatus(null)
   }
 
   const loadMemo = async () => {
@@ -118,7 +161,7 @@ export function RegulatorPanel() {
         : memo.createdAt
       const safeCreatedAt = safeIsoDate(createdAtIso)
 
-      setData({
+      const nextMemo: RegulatorMemo = {
         memoId: memo.memoHash,
         sender: sender as `0x${string}`,
         recipient: recipient as `0x${string}`,
@@ -126,6 +169,12 @@ export function RegulatorPanel() {
         amountDisplay: memo.amountDisplay ?? '—',
         createdAt: safeCreatedAt,
         payload,
+      }
+
+      setData(nextMemo)
+      setHistory((prev) => {
+        const next = [nextMemo, ...prev.filter((item) => item.memoId !== nextMemo.memoId)].slice(0, 50)
+        return next
       })
       setStatus(null)
     } catch (err: any) {
@@ -174,6 +223,35 @@ export function RegulatorPanel() {
           </button>
           {status && <div className="muted">{status}</div>}
           {error && <div className="error-text">{error}</div>}
+
+          <div className="stack-md" style={{ marginTop: 12 }}>
+            <div style={{ fontWeight: 600 }}>Retrieved onchain memos</div>
+            {history.length === 0 && (
+              <div className="muted">No memos retrieved yet.</div>
+            )}
+            {history.map((memo) => (
+              <div className="card memo-item" key={memo.memoId}>
+                <div className="memo-item-main">
+                  <div>
+                    <div className="memo-item-title">{memo.token.symbol} · {memo.amountDisplay}</div>
+                    <div className="muted">Sender <span className="mono">{memo.sender}</span></div>
+                    <div className="muted">Recipient <span className="mono">{memo.recipient}</span></div>
+                  </div>
+                  <button
+                    className="btn btn-secondary btn-small"
+                    type="button"
+                    onClick={() => openFromHistory(memo)}
+                  >
+                    View memo
+                  </button>
+                </div>
+                <div className="memo-item-meta">
+                  <span className="mono memo-hash-short">{memo.memoId}</span>
+                  <span className="muted">{new Date(memo.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
 
           {data && (
             <div className="stack-md">
