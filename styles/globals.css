@@ -642,3 +642,19 @@ input[type="file"] {
   color: var(--muted);
   word-break: break-all;
 }
+
+.app-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.app-nav-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.app-nav-link:hover {
+  color: var(--text);
+}
