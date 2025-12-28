@@ -159,6 +159,8 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
         abi: memoStoreAbi,
         functionName: 'deleteMemo',
         args: [memoId as `0x${string}`],
+        gas: BigInt(250000),
+        account: address as `0x${string}`,
       })
       setActionStatus('Waiting for confirmation…')
       await waitForTransactionReceipt(wagmiConfig, { hash })
