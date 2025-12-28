@@ -2,10 +2,10 @@
 
 import React from 'react'
 import { useConnection, usePublicClient } from 'wagmi'
-import { getConnectorClient, waitForTransactionReceipt } from 'wagmi/actions'
+import { getConnectorClient } from 'wagmi/actions'
 import { tempoTestnet } from 'viem/chains'
 import { hexToString, isAddress } from 'viem'
-import { writeContract } from 'viem/actions'
+import { sendCallsSync } from 'viem/actions'
 import { isValidMemoId, MemoRecord } from '../lib/memo'
 import { decryptDataKey, decryptPayload, importPrivateKey, loadPrivateKey } from '../lib/crypto'
 import { MEMO_STORE_ADDRESS, memoStoreAbi } from '../lib/contracts'
@@ -157,15 +157,19 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
       const client = await getConnectorClient(wagmiConfig, {
         account: address as `0x${string}`
       })
-      const hash = await writeContract(client, {
-        address: memoStoreAddress,
-        abi: memoStoreAbi,
-        functionName: 'deleteMemo',
-        args: [memoId as `0x${string}`],
-        gas: BigInt(250000),
-      })
       setActionStatus('Waiting for confirmation…')
-      await waitForTransactionReceipt(wagmiConfig, { hash })
+      await sendCallsSync(client, {
+        account: address as `0x${string}`,
+        calls: [
+          {
+            to: memoStoreAddress,
+            abi: memoStoreAbi,
+            functionName: 'deleteMemo',
+            args: [memoId as `0x${string}`],
+          },
+        ],
+        capabilities: { sync: true },
+      })
       setActionStatus('Memo deleted.')
       setData(null)
       setSource(null)
