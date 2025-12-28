@@ -4,7 +4,7 @@ import React from 'react'
 import { useConnection, usePublicClient, useWriteContract } from 'wagmi'
 import { waitForTransactionReceipt } from 'wagmi/actions'
 import { tempoTestnet } from 'viem/chains'
-import { hexToString } from 'viem'
+import { hexToString, isAddress } from 'viem'
 import { isValidMemoId, MemoRecord } from '../lib/memo'
 import { decryptDataKey, decryptPayload, importPrivateKey, loadPrivateKey } from '../lib/crypto'
 import { MEMO_STORE_ADDRESS, memoStoreAbi } from '../lib/contracts'
@@ -30,9 +30,12 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
   const [actionStatus, setActionStatus] = React.useState<string | null>(null)
   const [data, setData] = React.useState<MemoResponse | null>(null)
   const [source, setSource] = React.useState<'offchain' | 'onchain' | null>(null)
+  const memoStoreAddress = MEMO_STORE_ADDRESS
+  const hasMemoStore = Boolean(memoStoreAddress && isAddress(memoStoreAddress))
+
 
   const loadOnchainMemo = async () => {
-    if (!MEMO_STORE_ADDRESS) {
+    if (!hasMemoStore || !memoStoreAddress) {
       throw new Error('Memo store is not configured.')
     }
     if (!address) {
@@ -49,7 +52,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
 
     const privateKey = await importPrivateKey(storedKey.privateKeyJwk)
     const [dataHex, sender, recipient, createdAt] = await publicClient.readContract({
-      address: MEMO_STORE_ADDRESS,
+      address: memoStoreAddress,
       abi: memoStoreAbi,
       functionName: 'getMemo',
       args: [memoId as `0x${string}`],
@@ -138,7 +141,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
   }
 
   const deleteOnchainMemo = async () => {
-    if (!MEMO_STORE_ADDRESS) {
+    if (!hasMemoStore || !memoStoreAddress) {
       setError('Memo store is not configured.')
       return
     }
@@ -152,7 +155,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
     setActionStatus('Deleting onchain memo…')
     try {
       const hash = await writeContractAsync({
-        address: MEMO_STORE_ADDRESS,
+        address: memoStoreAddress,
         abi: memoStoreAbi,
         functionName: 'deleteMemo',
         args: [memoId as `0x${string}`],
@@ -174,6 +177,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
   const txUrl = data?.txHash ? `${explorerBase}/tx/${data.txHash}` : undefined
   const canDelete =
     source === 'onchain' &&
+    hasMemoStore &&
     !!address &&
     !!data &&
     data.recipient.toLowerCase() === address.toLowerCase()
