@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { list } from '@vercel/blob'
 import { isAddress, verifyMessage, type Hex } from 'viem'
 import { buildMemoAccessMessage, isValidMemoId, MemoRecord } from '../../../../../lib/memo'
 
+
 async function loadRecord(memoId: string) {
-  const result = await list({ prefix: `memos/${memoId}/record.json` })
-  if (!result.blobs.length) return null
-  const latest = [...result.blobs].sort((a, b) => (new Date(b.uploadedAt).getTime()) - (new Date(a.uploadedAt).getTime()))[0]
-  const response = await fetch(latest.downloadUrl)
+  const token = process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_ONLY_TOKEN
+  const storeId = token?.split('_')[3]
+  if (!storeId) return null
+  const recordUrl = `https://${storeId}.public.blob.vercel-storage.com/memos/${memoId}/record.json`
+  const response = await fetch(recordUrl)
   if (!response.ok) return null
   return (await response.json()) as MemoRecord
 }
