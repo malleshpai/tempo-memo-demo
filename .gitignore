@@ -40,3 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# local secrets
+.secrets/
+
+# foundry
+/contracts/lib/
+/contracts/out/
+/contracts/broadcast/
+/contracts/cache/
