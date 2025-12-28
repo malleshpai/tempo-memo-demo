@@ -10,6 +10,7 @@ import { isValidMemoId, MemoRecord } from '../lib/memo'
 import { decryptDataKey, decryptPayload, importPrivateKey, loadPrivateKey } from '../lib/crypto'
 import { MEMO_STORE_ADDRESS, memoStoreAbi } from '../lib/contracts'
 import { wagmiConfig } from '../lib/wagmi'
+import { IvmsPreview } from './IvmsPreview'
 import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
 
 type MemoViewerProps = {
@@ -247,13 +248,13 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
             <>
               <div className="card">
                 <div className="detail-grid">
-                  <div>
+                  <div className="detail-span">
                     <div className="muted">Sender</div>
-                    <div className="mono">{data.sender}</div>
+                    <div className="mono detail-address">{data.sender}</div>
                   </div>
-                  <div>
+                  <div className="detail-span">
                     <div className="muted">Recipient</div>
-                    <div className="mono">{data.recipient}</div>
+                    <div className="mono detail-address">{data.recipient}</div>
                   </div>
                   <div>
                     <div className="muted">Token</div>
@@ -276,8 +277,8 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
 
               <div className="card">
                 <div style={{ fontWeight: 600 }}>IVMS data</div>
-                {data.ivms.format === 'json' ? (
-                  <pre className="memo-json">{JSON.stringify(data.ivms.payload, null, 2)}</pre>
+                {data.ivms.format === 'json' && data.ivms.payload && typeof data.ivms.payload === 'object' ? (
+                  <IvmsPreview data={data.ivms.payload} />
                 ) : (
                   <pre className="memo-json">{String(data.ivms.payload)}</pre>
                 )}

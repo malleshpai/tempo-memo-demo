@@ -8,6 +8,7 @@ import { isValidMemoId } from '../lib/memo'
 import { MEMO_STORE_ADDRESS, REGULATOR_ADDRESS, REGULATOR_PRIVATE_KEY_JWK, memoStoreAbi } from '../lib/contracts'
 import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
 import type { MemoRecord } from '../lib/memo'
+import { IvmsPreview } from './IvmsPreview'
 
 const REGULATOR_PASSWORD = 'Iamtheregulator'
 
@@ -42,6 +43,16 @@ const parseAmount = (value: string) => {
   const number = Number(value)
   if (Number.isNaN(number)) return null
   return number
+}
+
+const resolveIvmsPayload = (payload?: unknown) => {
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>
+    if (record.schema === 'ivms-1' && 'payload' in record) {
+      return record.payload
+    }
+  }
+  return payload
 }
 
 export function RegulatorPanel() {
@@ -140,33 +151,17 @@ export function RegulatorPanel() {
     }
   }
 
-  const openFromHistory = async (memo: RegulatorSummary) => {
-    setMemoId(memo.memoId)
-    setError(null)
-    setStatus(null)
-    if (memo.source === 'offchain' && memo.recordUrl) {
-      try {
-        const response = await fetch(memo.recordUrl)
-        if (!response.ok) {
-          throw new Error('Unable to load offchain memo record.')
-        }
-        const record = (await response.json()) as MemoRecord
-        setData({ ...memo, payload: record.ivms })
-        return
-      } catch (err: any) {
-        setError(err?.message ?? String(err))
-        return
-      }
-    }
-    setData(memo)
-  }
-
-  const loadMemo = async () => {
+  const loadMemo = async (targetMemoId?: string) => {
+    const activeMemoId = targetMemoId ?? memoId
     setError(null)
     setStatus(null)
     setData(null)
 
-    if (!isValidMemoId(memoId)) {
+    if (targetMemoId) {
+      setMemoId(targetMemoId)
+    }
+
+    if (!isValidMemoId(activeMemoId)) {
       setError('Memo hash must be a 32-byte hex string.')
       return
     }
@@ -190,7 +185,7 @@ export function RegulatorPanel() {
         address: MEMO_STORE_ADDRESS,
         abi: memoStoreAbi,
         functionName: 'getMemo',
-        args: [memoId as `0x${string}`],
+        args: [activeMemoId as `0x${string}`],
       })
 
       if (!dataHex || dataHex === '0x') {
@@ -241,6 +236,34 @@ export function RegulatorPanel() {
       setError(err?.message ?? String(err))
       setStatus(null)
     }
+  }
+
+  const openFromHistory = async (memo: RegulatorSummary) => {
+    setMemoId(memo.memoId)
+    setError(null)
+    setStatus(null)
+
+    if (memo.source === 'offchain' && memo.recordUrl) {
+      try {
+        const response = await fetch(memo.recordUrl)
+        if (!response.ok) {
+          throw new Error('Unable to load offchain memo record.')
+        }
+        const record = (await response.json()) as MemoRecord
+        setData({ ...memo, payload: record.ivms })
+        return
+      } catch (err: any) {
+        setError(err?.message ?? String(err))
+        return
+      }
+    }
+
+    if (memo.source === 'onchain') {
+      await loadMemo(memo.memoId)
+      return
+    }
+
+    setData(memo)
   }
 
   const tokens = React.useMemo(() => {
@@ -437,13 +460,13 @@ export function RegulatorPanel() {
             <div className="stack-md">
               <div className="card">
                 <div className="detail-grid">
-                  <div>
+                  <div className="detail-span">
                     <div className="muted">Sender</div>
-                    <div className="mono">{data.sender}</div>
+                    <div className="mono detail-address">{data.sender}</div>
                   </div>
-                  <div>
+                  <div className="detail-span">
                     <div className="muted">Recipient</div>
-                    <div className="mono">{data.recipient}</div>
+                    <div className="mono detail-address">{data.recipient}</div>
                   </div>
                   <div>
                     <div className="muted">Token</div>
@@ -461,7 +484,11 @@ export function RegulatorPanel() {
               </div>
               <div className="card">
                 <div style={{ fontWeight: 600 }}>Memo payload</div>
-                <pre className="memo-json">{JSON.stringify(data.payload ?? 'No payload loaded', null, 2)}</pre>
+                {data.payload && typeof resolveIvmsPayload(data.payload) === 'object' ? (
+                  <IvmsPreview data={resolveIvmsPayload(data.payload)} />
+                ) : (
+                  <pre className="memo-json">{String(resolveIvmsPayload(data.payload) ?? 'No payload loaded')}</pre>
+                )}
               </div>
             </div>
           )}
