@@ -207,8 +207,8 @@ export function TransferPanel() {
         }
 
         const size = onchainMemoSize(onchainMemo)
-        if (size > 1024) {
-          throw new Error(`Encrypted memo is ${size} bytes, exceeds 1024 byte limit.`)
+        if (size > 2048) {
+          throw new Error(`Encrypted memo is ${size} bytes, exceeds 2048 byte limit.`)
         }
 
         setStatus('Storing encrypted memo onchain…')
@@ -344,7 +344,7 @@ export function TransferPanel() {
               disabled={!onchainReady}
             />
             <span className="muted" style={{ fontSize: 12 }}>
-              Store the encrypted memo JSON onchain (1024 bytes max).
+              Store the encrypted memo JSON onchain (2048 bytes max).
             </span>
           </div>
         </label>

@@ -10,7 +10,7 @@ contract MemoStore {
         uint64 createdAt;
     }
 
-    uint256 public constant MAX_MEMO_BYTES = 1024;
+    uint256 public constant MAX_MEMO_BYTES = 2048;
 
     mapping(bytes32 => MemoRecord) private memos;
 
