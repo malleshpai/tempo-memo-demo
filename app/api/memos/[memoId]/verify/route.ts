@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { kv } from '@vercel/kv'
 import { isAddress, verifyMessage } from 'viem'
-import { buildMemoAccessMessage, isValidMemoId, MemoRecord } from '../../../../lib/memo'
+import { buildMemoAccessMessage, isValidMemoId, MemoRecord } from '../../../../../lib/memo'
 
 export async function POST(request: Request, context: { params: { memoId: string } }) {
   const memoId = context.params.memoId
