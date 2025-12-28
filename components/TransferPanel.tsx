@@ -95,7 +95,7 @@ export function TransferPanel() {
         return
       }
       setRecipientKeyStatus('missing')
-      setRecipientKeyMessage('Recipient has not registered their key. Ask them to visit the Send page and generate + register to receive onchain memos.')
+      setRecipientKeyMessage('Recipient has not registered their key. Ask them to visit the Register tab to generate + register their key.')
     } catch (err: any) {
       setRecipientKeyStatus('error')
       setRecipientKeyMessage(err?.message ?? 'Unable to check recipient key.')
@@ -353,7 +353,7 @@ export function TransferPanel() {
               disabled={!toAddress || recipientKeyStatus === 'checking' || !onchainReady}
               onClick={() => void checkRecipientKey()}
             >
-              {recipientKeyStatus === 'checking' ? 'Checking…' : 'Check key'}
+              {recipientKeyStatus === 'checking' ? 'Checking…' : 'Sender Registered?'}
             </button>
           </div>
           {!onchainReady && (

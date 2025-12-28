@@ -77,12 +77,15 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
             <h1>{title}</h1>
           </div>
         </div>
-        <nav className="app-nav">
-          <a className="app-nav-link" href="/">Send</a>
-          <a className="app-nav-link" href="/vault">Vault</a>
-          <a className="app-nav-link" href="/regulator">Regulator</a>
-          <a className="app-nav-link" href="/docs">Docs</a>
-        </nav>
+        <div className="app-nav-wrap">
+          <nav className="app-nav">
+            <a className="app-nav-link" href="/">Send</a>
+            <a className="app-nav-link" href="/vault">Memo Vault</a>
+            <a className="app-nav-link" href="/register">Register</a>
+            <a className="app-nav-link" href="/docs">Docs</a>
+          </nav>
+          <a className="app-nav-link app-nav-link-danger" href="/regulator">Regulator mode</a>
+        </div>
         {!isAuthed ? (
           <div className="topbar-actions">
             <button

@@ -207,7 +207,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
     <div className="app-surface">
       <div className="panel memo-viewer">
         <div className="panel-header">
-          <h3 className="panel-title">Memo vault</h3>
+          <h3 className="panel-title">Memo Vault</h3>
           <div className="panel-header-actions">
             {canDelete && (
               <button

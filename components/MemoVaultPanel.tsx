@@ -196,7 +196,7 @@ export function MemoVaultPanel() {
   return (
     <section className="panel panel-wide">
       <div className="panel-header">
-        <h3 className="panel-title">Memo vault</h3>
+        <h3 className="panel-title">Memo Vault</h3>
         <div className="panel-header-actions">
           <button className="btn btn-secondary" onClick={openDialog} type="button">
             Retrieve onchain memo

@@ -698,6 +698,12 @@ input[type="file"] {
   border: 1px solid var(--border);
 }
 
+.app-nav-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .app-nav-link {
   font-size: 14px;
   font-weight: 700;
@@ -712,6 +718,18 @@ input[type="file"] {
 .app-nav-link:hover {
   border-color: rgba(37, 99, 235, 0.25);
   box-shadow: 0 6px 14px rgba(37, 99, 235, 0.18);
+}
+
+.app-nav-link-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+  box-shadow: 0 6px 12px rgba(185, 28, 28, 0.18);
+}
+
+.app-nav-link-danger:hover {
+  border-color: #fca5a5;
+  box-shadow: 0 6px 14px rgba(185, 28, 28, 0.28);
 }
 
 .btn-copy {

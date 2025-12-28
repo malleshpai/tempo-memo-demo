@@ -4,7 +4,6 @@ import React from 'react'
 import { AppShell } from '../components/AppShell'
 import { BalancePanel } from '../components/BalancePanel'
 import { TransferPanel } from '../components/TransferPanel'
-import { EncryptionKeyPanel } from '../components/EncryptionKeyPanel'
 
 export default function Page() {
   return (
@@ -37,7 +36,6 @@ export default function Page() {
       <div className="app-surface">
         <div className="app-grid">
           <BalancePanel />
-          <EncryptionKeyPanel />
           <TransferPanel />
         </div>
       </div>
