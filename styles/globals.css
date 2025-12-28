@@ -668,3 +668,22 @@ input[type="file"] {
   border-color: rgba(37, 99, 235, 0.25);
   box-shadow: 0 6px 14px rgba(37, 99, 235, 0.18);
 }
+
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.btn-copy svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}

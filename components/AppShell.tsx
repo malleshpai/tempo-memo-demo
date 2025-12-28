@@ -105,8 +105,21 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
                 <a className="topbar-address" href={addressUrl} target="_blank" rel="noreferrer">
                   {address}
                 </a>
-                <button className="btn btn-ghost btn-copy" onClick={() => void copyAddress()} type="button">
-                  {copied ? 'Copied' : 'Copy'}
+                <button
+                  className="btn btn-ghost btn-copy"
+                  onClick={() => void copyAddress()}
+                  type="button"
+                  aria-label="Copy address"
+                  title="Copy address"
+                >
+                  {copied ? (
+                    'Copied'
+                  ) : (
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="9" y="9" width="10" height="10" rx="2" />
+                      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                    </svg>
+                  )}
                 </button>
               </div>
             )}
