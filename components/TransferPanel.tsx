@@ -30,6 +30,8 @@ export function TransferPanel() {
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
   const [toAddress, setToAddress] = React.useState('')
+  const [recipientKeyStatus, setRecipientKeyStatus] = React.useState<'idle' | 'checking' | 'available' | 'missing' | 'error'>('idle')
+  const [recipientKeyMessage, setRecipientKeyMessage] = React.useState<string | null>(null)
   const [tokenAddress, setTokenAddress] = React.useState(DEFAULT_TRANSFER_TOKEN.address)
   const [amount, setAmount] = React.useState('')
   const [ivmsMode, setIvmsMode] = React.useState<IvmsMode>('upload')
@@ -49,9 +51,55 @@ export function TransferPanel() {
 
   const token = tokenList.find((item) => item.address === tokenAddress) ?? DEFAULT_TRANSFER_TOKEN
 
+  React.useEffect(() => {
+    setRecipientKeyStatus('idle')
+    setRecipientKeyMessage(null)
+    setUseOnchain(false)
+  }, [toAddress])
+
   const resetStatus = () => {
     setStatus(null)
     setError(null)
+  }
+
+  const checkRecipientKey = async () => {
+    setRecipientKeyMessage(null)
+    if (!publicClient) {
+      setRecipientKeyStatus('error')
+      setRecipientKeyMessage('Onchain client is not available.')
+      return
+    }
+    if (!PUBLIC_KEY_REGISTRY_ADDRESS) {
+      setRecipientKeyStatus('error')
+      setRecipientKeyMessage('Public key registry is not configured.')
+      return
+    }
+    if (!isAddress(toAddress as `0x${string}`)) {
+      setRecipientKeyStatus('error')
+      setRecipientKeyMessage('Destination address is invalid.')
+      return
+    }
+    setRecipientKeyStatus('checking')
+    try {
+      const result = await publicClient.readContract({
+        address: PUBLIC_KEY_REGISTRY_ADDRESS as `0x${string}`,
+        abi: publicKeyRegistryAbi,
+        functionName: 'getKey',
+        args: [toAddress as `0x${string}`],
+      })
+      const key = result?.[0] as string | undefined
+      const keyType = result?.[1] as number | undefined
+      if (key && key.length > 2 && keyType === KEY_TYPE_P256) {
+        setRecipientKeyStatus('available')
+        setRecipientKeyMessage('Recipient key is registered for onchain memos.')
+        return
+      }
+      setRecipientKeyStatus('missing')
+      setRecipientKeyMessage('Recipient has not registered their key. Ask them to visit the Send page and generate + register to receive onchain memos.')
+    } catch (err: any) {
+      setRecipientKeyStatus('error')
+      setRecipientKeyMessage(err?.message ?? 'Unable to check recipient key.')
+    }
   }
 
   const onFileChange = async (file?: File | null) => {
@@ -114,6 +162,7 @@ export function TransferPanel() {
   const hasIvmsPreview = Boolean(ivmsPreviewData)
   const onchainReady = Boolean(PUBLIC_KEY_REGISTRY_ADDRESS && MEMO_STORE_ADDRESS)
 
+  const recipientKeyOk = recipientKeyStatus === 'available'
   const canSubmit =
     !!address &&
     isAddress(toAddress as `0x${string}`) &&
@@ -134,6 +183,9 @@ export function TransferPanel() {
     try {
       setStatus('Submitting transfer…')
       if (useOnchain) {
+        if (!recipientKeyOk) {
+          throw new Error("Recipient has not registered their key for onchain memos.")
+        }
         if (!onchainReady || !MEMO_STORE_ADDRESS || !PUBLIC_KEY_REGISTRY_ADDRESS) {
           throw new Error('Onchain memo contracts are not configured.')
         }
@@ -289,11 +341,32 @@ export function TransferPanel() {
       <div className="stack-md" style={{ marginTop: 12 }}>
         <label className="field">
           <span>Destination address</span>
-          <input
-            value={toAddress}
-            onChange={(event) => setToAddress(event.target.value)}
-            placeholder="0x…"
-          />
+          <div className="field-row">
+            <input
+              value={toAddress}
+              onChange={(event) => setToAddress(event.target.value)}
+              placeholder="0x…"
+            />
+            <button
+              className="btn btn-secondary btn-small"
+              type="button"
+              disabled={!toAddress || recipientKeyStatus === 'checking' || !onchainReady}
+              onClick={() => void checkRecipientKey()}
+            >
+              {recipientKeyStatus === 'checking' ? 'Checking…' : 'Check key'}
+            </button>
+          </div>
+          {!onchainReady && (
+            <div className="muted" style={{ marginTop: 6 }}>
+              Onchain memos require the registry + memo store contracts.
+            </div>
+          )}
+          {recipientKeyStatus === 'available' && recipientKeyMessage && (
+            <div className="muted" style={{ marginTop: 6 }}>{recipientKeyMessage}</div>
+          )}
+          {recipientKeyStatus !== 'available' && recipientKeyMessage && (
+            <div className="error-text" style={{ marginTop: 6 }}>{recipientKeyMessage}</div>
+          )}
         </label>
 
         <div className="field-row">
@@ -341,10 +414,10 @@ export function TransferPanel() {
               type="checkbox"
               checked={useOnchain}
               onChange={(event) => setUseOnchain(event.target.checked)}
-              disabled={!onchainReady}
+              disabled={!onchainReady || recipientKeyStatus === 'checking' || !recipientKeyOk}
             />
             <span className="muted" style={{ fontSize: 12 }}>
-              Store the encrypted memo JSON onchain (2048 bytes max).
+              Store the encrypted memo JSON onchain (2048 bytes max). Recipient must register their key.
             </span>
           </div>
         </label>

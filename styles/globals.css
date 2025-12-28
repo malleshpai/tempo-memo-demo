@@ -544,6 +544,51 @@ button {
   color: #b91c1c;
 }
 
+.status-pill-neutral {
+  background: rgba(15, 23, 42, 0.08);
+  color: #1f2937;
+}
+
+.vault-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+  align-items: end;
+}
+
+.field-inline span {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filter-range {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.memo-item-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.memo-item-badges {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.memo-hash-short {
+  max-width: 260px;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 input[type="file"] {
   width: 100%;
   padding: 10px;

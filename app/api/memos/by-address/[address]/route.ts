@@ -29,7 +29,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ ad
     const normalized = normalizeAddress(address)
     const items = await loadSummaries(normalized)
     const sorted = items
-      .filter((item) => item && item.memoId)
+      .filter((item) => item && item.memoId && !item.deleted)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
     return NextResponse.json({ items: sorted })

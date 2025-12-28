@@ -146,6 +146,7 @@ export async function POST(request: Request) {
     txHash: record.txHash,
     createdAt,
     hasInvoice: Boolean(invoiceInfo),
+    source: 'offchain',
   }
   const senderSummary = {
     ...summaryBase,
