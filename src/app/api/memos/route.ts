@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   const createdAt = new Date().toISOString()
 
   if (file) {
-    const blob = await put(`memos/${memoId}/ivms-${file.name}`, file, { access: 'public' })
+    const blob = await put(`memos/${memoId}/ivms-${file.name}`, file, { access: 'public', addRandomSuffix: false })
     fileInfo = {
       url: blob.url,
       filename: file.name,
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   } else {
     const filename = 'ivms.json'
     const payloadBlob = new Blob([canonical], { type: 'application/json' })
-    const blob = await put(`memos/${memoId}/${filename}`, payloadBlob, { access: 'public' })
+    const blob = await put(`memos/${memoId}/${filename}`, payloadBlob, { access: 'public', addRandomSuffix: false })
     fileInfo = {
       url: blob.url,
       filename,
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
   }
 
   const recordBlob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' })
-  await put(`memos/${memoId}/record.json`, recordBlob, { access: 'public' })
+  await put(`memos/${memoId}/record.json`, recordBlob, { access: 'public', addRandomSuffix: false })
 
   return NextResponse.json({ ok: true, memoId })
 }
