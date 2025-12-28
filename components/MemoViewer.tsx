@@ -11,7 +11,7 @@ type MemoViewerProps = {
 
 type MemoResponse = Pick<
   MemoRecord,
-  'memoId' | 'sender' | 'recipient' | 'token' | 'amountBase' | 'amountDisplay' | 'txHash' | 'ivms' | 'file' | 'createdAt'
+  'memoId' | 'sender' | 'recipient' | 'token' | 'amountBase' | 'amountDisplay' | 'txHash' | 'ivms' | 'file' | 'invoice' | 'createdAt'
 >
 
 export function MemoViewer({ memoId }: MemoViewerProps) {
@@ -134,6 +134,11 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
               {data.file && (
                 <a className="btn btn-secondary" href={data.file.url} download>
                   Download IVMS file
+                </a>
+              )}
+              {data.invoice && (
+                <a className="btn btn-secondary" href={data.invoice.url} download>
+                  Download invoice PDF
                 </a>
               )}
             </>

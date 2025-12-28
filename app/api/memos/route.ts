@@ -25,6 +25,7 @@ export async function POST(request: Request) {
   let ivmsCanonical = ''
   let ivmsPayload: IvmsPayload | null = null
   let file: File | null = null
+  let invoice: File | null = null
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await request.formData()
@@ -42,6 +43,10 @@ export async function POST(request: Request) {
     const upload = formData.get('file')
     if (upload instanceof File) {
       file = upload
+    }
+    const invoiceUpload = formData.get('invoice')
+    if (invoiceUpload instanceof File) {
+      invoice = invoiceUpload
     }
   } else {
     const body = await request.json()
@@ -73,6 +78,7 @@ export async function POST(request: Request) {
   }
 
   let fileInfo: MemoRecord['file'] | undefined
+  let invoiceInfo: MemoRecord['invoice'] | undefined
   const createdAt = new Date().toISOString()
 
   if (file) {
@@ -93,6 +99,19 @@ export async function POST(request: Request) {
     }
   }
 
+  if (invoice) {
+    const invoiceBlob = await put(`memos/${memoId}/invoice.pdf`, invoice, {
+      access: 'public',
+      addRandomSuffix: false,
+      contentType: 'application/pdf',
+    })
+    invoiceInfo = {
+      url: invoiceBlob.url,
+      filename: invoice.name || 'invoice.pdf',
+      contentType: 'application/pdf',
+    }
+  }
+
   const record: MemoRecord = {
     memoId: memoId as `0x${string}`,
     sender: sender as `0x${string}`,
@@ -108,6 +127,7 @@ export async function POST(request: Request) {
     ivms: ivmsPayload,
     ivmsCanonical: canonical,
     file: fileInfo,
+    invoice: invoiceInfo,
     createdAt,
   }
 
@@ -125,6 +145,7 @@ export async function POST(request: Request) {
     amountBase,
     txHash: record.txHash,
     createdAt,
+    hasInvoice: Boolean(invoiceInfo),
   }
   const senderSummary = {
     ...summaryBase,

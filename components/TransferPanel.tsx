@@ -30,6 +30,7 @@ export function TransferPanel() {
   const [ivmsMode, setIvmsMode] = React.useState<IvmsMode>('upload')
   const [ivmsForm, setIvmsForm] = React.useState<IvmsFormData>(emptyForm)
   const [ivmsFile, setIvmsFile] = React.useState<File | null>(null)
+  const [invoiceFile, setInvoiceFile] = React.useState<File | null>(null)
   const [ivmsFileText, setIvmsFileText] = React.useState<string | null>(null)
   const [ivmsFileIsJson, setIvmsFileIsJson] = React.useState(false)
   const [status, setStatus] = React.useState<string | null>(null)
@@ -149,6 +150,9 @@ export function TransferPanel() {
       if (ivmsFile) {
         formData.set('file', ivmsFile)
       }
+      if (invoiceFile) {
+        formData.set('invoice', invoiceFile)
+      }
 
       setStatus('Saving memo data…')
       const response = await fetch('/api/memos', {
@@ -237,6 +241,14 @@ export function TransferPanel() {
         {ivmsMode === 'upload' ? (
           <div className="stack-sm">
             <input type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
+            <label className="field">
+              <span>Invoice PDF (optional)</span>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={(event) => setInvoiceFile(event.target.files?.[0] ?? null)}
+              />
+            </label>
             {ivmsFile && (
               <div className="muted" style={{ fontSize: 12 }}>
                 {ivmsFile.name} · {ivmsFile.type || 'text/plain'}

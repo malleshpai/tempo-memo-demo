@@ -27,6 +27,11 @@ export type MemoRecord = {
     filename: string
     contentType: string
   }
+  invoice?: {
+    url: string
+    filename: string
+    contentType: string
+  }
   createdAt: string
 }
 

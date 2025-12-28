@@ -15,6 +15,7 @@ type MemoSummary = {
   amountDisplay: string
   txHash?: string
   createdAt: string
+  hasInvoice?: boolean
 }
 
 export function MemoVaultPanel() {
@@ -84,6 +85,7 @@ export function MemoVaultPanel() {
               <div className="memo-item-main">
                 <div>
                   <div style={{ fontWeight: 600 }}>{item.token.symbol} · {item.amountDisplay}</div>
+                  {item.hasInvoice && <span className="status-pill status-pill-warn">Invoice</span>}
                   <div className="muted" style={{ fontSize: 12 }}>
                     {item.role === 'sender' ? 'To' : 'From'} {item.counterparty}
                   </div>
