@@ -10,6 +10,7 @@ import { TOKENS, DEFAULT_TRANSFER_TOKEN } from '../lib/constants'
 import { canonicalizeJson, hashMemo, IvmsPayload } from '../lib/memo'
 import { wagmiConfig } from '../lib/wagmi'
 import { IvmsForm, IvmsFormData } from './IvmsForm'
+import { IvmsPreview } from './IvmsPreview'
 
 type IvmsMode = 'upload' | 'form'
 
@@ -101,6 +102,9 @@ export function TransferPanel() {
     () => (ivmsCanonical ? hashMemo(ivmsCanonical) : null),
     [ivmsCanonical],
   )
+
+  const ivmsPreviewData = ivmsPayload?.format === 'json' ? (ivmsPayload.payload as Record<string, unknown>) : null
+  const hasIvmsPreview = Boolean(ivmsPreviewData)
 
   const canSubmit =
     !!address &&
@@ -238,6 +242,7 @@ export function TransferPanel() {
                 {ivmsFile.name} · {ivmsFile.type || 'text/plain'}
               </div>
             )}
+            {hasIvmsPreview && <IvmsPreview data={ivmsPreviewData} />}
           </div>
         ) : (
           <IvmsForm value={ivmsForm} onChange={setIvmsForm} />

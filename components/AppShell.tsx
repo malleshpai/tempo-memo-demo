@@ -18,6 +18,7 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
   const { connect, connectAsync, connectors, isPending: connecting } = useConnect()
   const { disconnect } = useDisconnect()
   const [isMounted, setIsMounted] = React.useState(false)
+  const [copied, setCopied] = React.useState(false)
 
   React.useEffect(() => {
     setIsMounted(true)
@@ -31,6 +32,17 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
   const onLogin = () => {
     if (!connector) return
     connect({ connector })
+  }
+
+  const copyAddress = async () => {
+    if (!address) return
+    try {
+      await navigator.clipboard.writeText(address)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopied(false)
+    }
   }
 
   const onSignUp = () => {
@@ -85,9 +97,14 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
         ) : (
           <div className="topbar-actions">
             {addressUrl && (
-              <a className="topbar-address" href={addressUrl} target="_blank" rel="noreferrer">
-                {address}
-              </a>
+              <div className="topbar-address-wrap">
+                <a className="topbar-address" href={addressUrl} target="_blank" rel="noreferrer">
+                  {address}
+                </a>
+                <button className="btn btn-ghost btn-copy" onClick={() => void copyAddress()} type="button">
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
             )}
             <button className="btn btn-secondary" onClick={() => disconnect()}>
               Sign out

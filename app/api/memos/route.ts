@@ -114,5 +114,32 @@ export async function POST(request: Request) {
   const recordBlob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' })
   await put(`memos/${memoId}/record.json`, recordBlob, { access: 'public', addRandomSuffix: false })
 
+  const senderKey = sender.toLowerCase()
+  const recipientKey = recipient.toLowerCase()
+  const summaryBase = {
+    memoId,
+    sender,
+    recipient,
+    token: record.token,
+    amountDisplay,
+    amountBase,
+    txHash: record.txHash,
+    createdAt,
+  }
+  const senderSummary = {
+    ...summaryBase,
+    role: 'sender',
+    counterparty: recipient,
+  }
+  const recipientSummary = {
+    ...summaryBase,
+    role: 'recipient',
+    counterparty: sender,
+  }
+  const senderBlob = new Blob([JSON.stringify(senderSummary, null, 2)], { type: 'application/json' })
+  const recipientBlob = new Blob([JSON.stringify(recipientSummary, null, 2)], { type: 'application/json' })
+  await put(`memos/by-address/${senderKey}/${memoId}.json`, senderBlob, { access: 'public', addRandomSuffix: false })
+  await put(`memos/by-address/${recipientKey}/${memoId}.json`, recipientBlob, { access: 'public', addRandomSuffix: false })
+
   return NextResponse.json({ ok: true, memoId })
 }

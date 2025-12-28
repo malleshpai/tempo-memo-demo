@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react'
-import { useConnection, useSignMessage } from 'wagmi'
+import { useConnection } from 'wagmi'
 import { tempoTestnet } from 'viem/chains'
-import { buildMemoAccessMessage, isValidMemoId, MemoRecord } from '../lib/memo'
+import { isValidMemoId, MemoRecord } from '../lib/memo'
 
 type MemoViewerProps = {
   memoId: string
@@ -16,7 +16,6 @@ type MemoResponse = Pick<
 
 export function MemoViewer({ memoId }: MemoViewerProps) {
   const { address } = useConnection()
-  const { signMessageAsync } = useSignMessage()
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [data, setData] = React.useState<MemoResponse | null>(null)
@@ -26,12 +25,10 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
     setIsLoading(true)
     setError(null)
     try {
-      const message = buildMemoAccessMessage(memoId, address)
-      const signature = await signMessageAsync({ message })
       const response = await fetch(`/api/memos/${memoId}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, signature }),
+        body: JSON.stringify({ address }),
       })
       if (!response.ok) {
         const body = await response.json().catch(() => ({}))

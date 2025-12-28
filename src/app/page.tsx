@@ -4,6 +4,7 @@ import React from 'react'
 import { AppShell } from '../../components/AppShell'
 import { BalancePanel } from '../../components/BalancePanel'
 import { TransferPanel } from '../../components/TransferPanel'
+import { MemoVaultPanel } from '../../components/MemoVaultPanel'
 
 export default function Page() {
   return (
@@ -37,6 +38,7 @@ export default function Page() {
         <div className="app-grid">
           <BalancePanel />
           <TransferPanel />
+          <MemoVaultPanel />
         </div>
       </div>
     </AppShell>
