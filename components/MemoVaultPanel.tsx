@@ -1,10 +1,9 @@
 'use client'
 
 import React from 'react'
-import { useConnection, usePublicClient } from 'wagmi'
-import { hexToString, parseAbiItem } from 'viem'
-import { MEMO_STORE_ADDRESS } from '../lib/contracts'
-import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
+import { useConnection } from 'wagmi'
+import { useRouter } from 'next/navigation'
+import { isValidMemoId } from '../lib/memo'
 
 type MemoSummary = {
   memoId: string
@@ -19,32 +18,17 @@ type MemoSummary = {
   txHash?: string
   createdAt: string
   hasInvoice?: boolean
-  source?: 'offchain' | 'onchain'
-}
-
-const safeIsoDate = (value?: string) => {
-  if (value && !Number.isNaN(Date.parse(value))) {
-    return value
-  }
-  return new Date().toISOString()
-}
-
-const decodeOnchainMemo = (dataHex?: `0x${string}`) => {
-  if (!dataHex) return null
-  try {
-    const json = hexToString(dataHex)
-    return JSON.parse(json) as OnchainEncryptedMemo
-  } catch {
-    return null
-  }
 }
 
 export function MemoVaultPanel() {
   const { address } = useConnection()
-  const publicClient = usePublicClient()
+  const router = useRouter()
   const [items, setItems] = React.useState<MemoSummary[]>([])
   const [error, setError] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(false)
+  const [showDialog, setShowDialog] = React.useState(false)
+  const [memoInput, setMemoInput] = React.useState('')
+  const [dialogError, setDialogError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (!address) {
@@ -53,110 +37,18 @@ export function MemoVaultPanel() {
     }
 
     let cancelled = false
-    const loadOffchain = async () => {
-      const response = await fetch(`/api/memos/by-address/${address}`)
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data?.error || 'Unable to load memos.')
-      }
-      const results = (data.items ?? []) as MemoSummary[]
-      return results.map((item) => ({ ...item, source: 'offchain' as const }))
-    }
-
-    const loadOnchain = async () => {
-      if (!publicClient || !MEMO_STORE_ADDRESS) {
-        return [] as MemoSummary[]
-      }
-
-      const memoStoredEvent = parseAbiItem(
-        'event MemoStored(bytes32 indexed memoHash, address indexed sender, address indexed recipient, bytes data)',
-      )
-      const memoDeletedEvent = parseAbiItem(
-        'event MemoDeleted(bytes32 indexed memoHash, address indexed recipient)',
-      )
-
-      const [sentLogs, receivedLogs, deletedLogs] = await Promise.all([
-        publicClient.getLogs({
-          address: MEMO_STORE_ADDRESS,
-          event: memoStoredEvent,
-          args: { sender: address },
-          fromBlock: BigInt(0),
-          toBlock: 'latest',
-        }),
-        publicClient.getLogs({
-          address: MEMO_STORE_ADDRESS,
-          event: memoStoredEvent,
-          args: { recipient: address },
-          fromBlock: BigInt(0),
-          toBlock: 'latest',
-        }),
-        publicClient.getLogs({
-          address: MEMO_STORE_ADDRESS,
-          event: memoDeletedEvent,
-          fromBlock: BigInt(0),
-          toBlock: 'latest',
-        }),
-      ])
-
-      const deleted = new Set(
-        deletedLogs
-          .map((log) => (log.args.memoHash as string | undefined)?.toLowerCase())
-          .filter(Boolean) as string[],
-      )
-
-      const summaries = new Map<string, MemoSummary>()
-      const normalizedAddress = address.toLowerCase()
-      const pushLog = (log: (typeof sentLogs)[number]) => {
-        const memoHash = log.args.memoHash as `0x${string}`
-        if (!memoHash) return
-        if (deleted.has(memoHash.toLowerCase())) return
-
-        const memo = decodeOnchainMemo(log.args.data as `0x${string}` | undefined)
-        const sender = (log.args.sender as `0x${string}`) ?? memo?.sender
-        const recipient = (log.args.recipient as `0x${string}`) ?? memo?.recipient
-        if (!sender || !recipient) return
-
-        const role = sender.toLowerCase() === normalizedAddress ? 'sender' : 'recipient'
-        const counterparty = role === 'sender' ? recipient : sender
-        const tokenSymbol = memo?.token?.symbol ?? 'Encrypted'
-        const createdAt = safeIsoDate(memo?.createdAt)
-
-        summaries.set(memoHash.toLowerCase(), {
-          memoId: memoHash,
-          sender,
-          recipient,
-          role,
-          counterparty,
-          token: { symbol: tokenSymbol },
-          amountDisplay: memo?.amountDisplay ?? '—',
-          txHash: log.transactionHash,
-          createdAt,
-          source: 'onchain',
-        })
-      }
-
-      sentLogs.forEach(pushLog)
-      receivedLogs.forEach(pushLog)
-
-      return Array.from(summaries.values())
-    }
-
     const load = async () => {
       setIsLoading(true)
       setError(null)
       try {
-        const [offchainItems, onchainItems] = await Promise.all([loadOffchain(), loadOnchain()])
-        if (cancelled) return
-        const merged = new Map<string, MemoSummary>()
-        onchainItems.forEach((item) => merged.set(item.memoId.toLowerCase(), item))
-        offchainItems.forEach((item) => merged.set(item.memoId.toLowerCase(), item))
-
-        const results = Array.from(merged.values()).sort((a, b) => {
-          const left = Date.parse(a.createdAt)
-          const right = Date.parse(b.createdAt)
-          return (Number.isNaN(right) ? 0 : right) - (Number.isNaN(left) ? 0 : left)
-        })
-        setItems(results)
+        const response = await fetch(`/api/memos/by-address/${address}`)
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data?.error || 'Unable to load memos.')
+        }
+        if (!cancelled) {
+          setItems(data.items ?? [])
+        }
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.message ?? String(err))
@@ -172,13 +64,32 @@ export function MemoVaultPanel() {
     return () => {
       cancelled = true
     }
-  }, [address, publicClient])
+  }, [address])
+
+  const openDialog = () => {
+    setDialogError(null)
+    setMemoInput('')
+    setShowDialog(true)
+  }
+
+  const submitDialog = () => {
+    const trimmed = memoInput.trim()
+    if (!isValidMemoId(trimmed)) {
+      setDialogError('Enter a valid 32-byte memo hash.')
+      return
+    }
+    setShowDialog(false)
+    router.push(`/${trimmed}`)
+  }
 
   return (
     <section className="panel panel-wide">
       <div className="panel-header">
         <h3 className="panel-title">Memo vault</h3>
         <div className="panel-header-actions">
+          <button className="btn btn-secondary" onClick={openDialog} type="button">
+            Retrieve onchain memo
+          </button>
           <span className="muted" style={{ fontSize: 12 }}>
             {address ? 'Latest memos for this address' : 'Log in to view memos'}
           </span>
@@ -191,7 +102,7 @@ export function MemoVaultPanel() {
 
       {address && !isLoading && !error && (
         <div className="stack-md" style={{ marginTop: 12 }}>
-          {items.length === 0 && (
+          {items.length == 0 && (
             <div className="muted">No memos found for this address.</div>
           )}
           {items.map((item) => (
@@ -200,7 +111,6 @@ export function MemoVaultPanel() {
                 <div>
                   <div style={{ fontWeight: 600 }}>{item.token.symbol} · {item.amountDisplay}</div>
                   {item.hasInvoice && <span className="status-pill status-pill-warn">Invoice</span>}
-                  {item.source === 'onchain' && <span className="status-pill">Onchain</span>}
                   <div className="muted" style={{ fontSize: 12 }}>
                     {item.role === 'sender' ? 'To' : 'From'} {item.counterparty}
                   </div>
@@ -215,6 +125,38 @@ export function MemoVaultPanel() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {showDialog && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowDialog(false)}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h4>Retrieve onchain memo</h4>
+              <button className="btn btn-ghost" onClick={() => setShowDialog(false)} type="button">
+                Close
+              </button>
+            </div>
+            <div className="stack-sm">
+              <label className="field">
+                <span>Memo hash</span>
+                <input
+                  value={memoInput}
+                  onChange={(event) => setMemoInput(event.target.value)}
+                  placeholder="0x…"
+                />
+              </label>
+              {dialogError && <div className="error-text">{dialogError}</div>}
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={() => setShowDialog(false)} type="button">
+                  Cancel
+                </button>
+                <button className="btn btn-primary" onClick={submitDialog} type="button">
+                  Open memo
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </section>
