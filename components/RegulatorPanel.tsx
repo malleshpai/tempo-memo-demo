@@ -9,7 +9,6 @@ import { MEMO_STORE_ADDRESS, REGULATOR_ADDRESS, REGULATOR_PRIVATE_KEY_JWK, memoS
 import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
 
 const REGULATOR_PASSWORD = 'Iamtheregulator'
-const STORAGE_KEY = 'tempo-regulator-memos'
 
 type RegulatorMemo = {
   memoId: `0x${string}`
@@ -22,7 +21,7 @@ type RegulatorMemo = {
   }
   amountDisplay: string
   createdAt: string
-  payload: unknown
+  payload?: unknown
 }
 
 const safeIsoDate = (value?: string) => {
@@ -30,28 +29,6 @@ const safeIsoDate = (value?: string) => {
     return value
   }
   return new Date().toISOString()
-}
-
-const readHistory = () => {
-  if (typeof window === 'undefined') return [] as RegulatorMemo[]
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed as RegulatorMemo[]
-  } catch {
-    return [] as RegulatorMemo[]
-  }
-}
-
-const writeHistory = (items: RegulatorMemo[]) => {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  } catch {
-    // Ignore storage errors.
-  }
 }
 
 export function RegulatorPanel() {
@@ -63,7 +40,6 @@ export function RegulatorPanel() {
   const [error, setError] = React.useState<string | null>(null)
   const [data, setData] = React.useState<RegulatorMemo | null>(null)
   const [history, setHistory] = React.useState<RegulatorMemo[]>([])
-  const historyLoaded = React.useRef(false)
 
   const regulatorKey = React.useMemo(() => {
     if (!REGULATOR_PRIVATE_KEY_JWK) return null
@@ -74,16 +50,27 @@ export function RegulatorPanel() {
     }
   }, [])
 
-  React.useEffect(() => {
-    if (!isUnlocked || historyLoaded.current) return
-    historyLoaded.current = true
-    setHistory(readHistory())
-  }, [isUnlocked])
+  const loadHistory = React.useCallback(async (regulatorAddress: string) => {
+    try {
+      const response = await fetch(`/api/memos/by-regulator/${regulatorAddress}`)
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Unable to load regulator memos.')
+      }
+      setHistory(payload.items ?? [])
+    } catch (err: any) {
+      setError(err?.message ?? String(err))
+    }
+  }, [])
 
   React.useEffect(() => {
     if (!isUnlocked) return
-    writeHistory(history)
-  }, [history, isUnlocked])
+    if (!REGULATOR_ADDRESS) {
+      setError('Regulator key is not configured.')
+      return
+    }
+    void loadHistory(REGULATOR_ADDRESS)
+  }, [isUnlocked, loadHistory])
 
   const unlock = () => {
     setError(null)
@@ -227,7 +214,7 @@ export function RegulatorPanel() {
           <div className="stack-md" style={{ marginTop: 12 }}>
             <div style={{ fontWeight: 600 }}>Retrieved onchain memos</div>
             {history.length === 0 && (
-              <div className="muted">No memos retrieved yet.</div>
+              <div className="muted">No memos indexed yet.</div>
             )}
             {history.map((memo) => (
               <div className="card memo-item" key={memo.memoId}>

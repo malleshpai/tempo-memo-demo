@@ -42,11 +42,11 @@ type IndexerConfig =
   | {
       token: string
       memoStoreAddress: `0x${string}`
+      regulatorAddress?: `0x${string}`
     }
   | {
       error: string
     }
-
 
 const getIndexerConfig = (): IndexerConfig => {
   const token = getToken()
@@ -55,7 +55,12 @@ const getIndexerConfig = (): IndexerConfig => {
   if (!memoStoreAddress || !isAddress(memoStoreAddress)) {
     return { error: 'Memo store not configured.' }
   }
-  return { token, memoStoreAddress: memoStoreAddress as `0x${string}` }
+  const regulatorAddress = process.env.NEXT_PUBLIC_REGULATOR_ADDRESS
+  return {
+    token,
+    memoStoreAddress: memoStoreAddress as `0x${string}`,
+    regulatorAddress: regulatorAddress && isAddress(regulatorAddress) ? (regulatorAddress as `0x${string}`) : undefined,
+  }
 }
 
 const loadState = async (token: string) => {
@@ -109,9 +114,9 @@ const buildSummary = (
   source: 'onchain',
 })
 
-const writeSummary = async (token: string, address: string, memoId: string, payload: Record<string, unknown>) => {
+const writeSummary = async (token: string, address: string, memoId: string, payload: Record<string, unknown>, prefix: string) => {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-  await put(`memos/by-address/${address}/${memoId}.json`, blob, {
+  await put(`${prefix}/${address}/${memoId}.json`, blob, {
     access: 'public',
     addRandomSuffix: false,
     token,
@@ -163,7 +168,7 @@ export const runOnchainIndexer = async (mode: IndexMode = 'auto'): Promise<Index
     return { ok: false, error: config.error }
   }
 
-  const { token, memoStoreAddress } = config
+  const { token, memoStoreAddress, regulatorAddress } = config
   const client = createPublicClient({ transport: http(RPC_URL) })
   const latestBlock = await client.getBlockNumber()
   const state = await loadState(token)
@@ -232,12 +237,18 @@ export const runOnchainIndexer = async (mode: IndexMode = 'auto'): Promise<Index
           ...summary,
           role: 'sender',
           counterparty: recipient,
-        }),
+        }, 'memos/by-address'),
         writeSummary(token, recipient.toLowerCase(), memoHash, {
           ...summary,
           role: 'recipient',
           counterparty: sender,
-        }),
+        }, 'memos/by-address'),
+        regulatorAddress
+          ? writeSummary(token, regulatorAddress.toLowerCase(), memoHash, {
+              ...summary,
+              role: 'regulator',
+            }, 'memos/by-regulator')
+          : Promise.resolve(),
       ])
     }
 
@@ -245,7 +256,12 @@ export const runOnchainIndexer = async (mode: IndexMode = 'auto'): Promise<Index
       const memoHash = log.args.memoHash as `0x${string}` | undefined
       const recipient = (log.args.recipient as string | undefined) ?? ''
       if (!memoHash || !recipient) continue
-      await writeSummary(token, recipient.toLowerCase(), memoHash, { memoId: memoHash, deleted: true })
+      await Promise.all([
+        writeSummary(token, recipient.toLowerCase(), memoHash, { memoId: memoHash, deleted: true }, 'memos/by-address'),
+        regulatorAddress
+          ? writeSummary(token, regulatorAddress.toLowerCase(), memoHash, { memoId: memoHash, deleted: true }, 'memos/by-regulator')
+          : Promise.resolve(),
+      ])
     }
 
     chunks += 1
