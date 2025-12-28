@@ -1,0 +1,96 @@
+import type { Address } from 'viem'
+
+export const PUBLIC_KEY_REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_PUBLIC_KEY_REGISTRY_ADDRESS as
+  | Address
+  | undefined
+export const MEMO_STORE_ADDRESS = process.env.NEXT_PUBLIC_MEMO_STORE_ADDRESS as Address | undefined
+export const REGULATOR_PUBLIC_KEY_HEX = process.env.NEXT_PUBLIC_REGULATOR_PUBLIC_KEY_HEX
+export const REGULATOR_ADDRESS = process.env.NEXT_PUBLIC_REGULATOR_ADDRESS as Address | undefined
+
+export const KEY_TYPE_P256 = 1
+
+export const publicKeyRegistryAbi = [
+  {
+    type: 'function',
+    name: 'setKey',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'key', type: 'bytes' },
+      { name: 'keyType', type: 'uint8' },
+      { name: 'version', type: 'uint32' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getKey',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [
+      { name: 'key', type: 'bytes' },
+      { name: 'keyType', type: 'uint8' },
+      { name: 'version', type: 'uint32' },
+    ],
+  },
+] as const
+
+export const memoStoreAbi = [
+  {
+    type: 'function',
+    name: 'putMemo',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'memoHash', type: 'bytes32' },
+      { name: 'data', type: 'bytes' },
+      { name: 'sender', type: 'address' },
+      { name: 'recipient', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'deleteMemo',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'memoHash', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getMemo',
+    stateMutability: 'view',
+    inputs: [{ name: 'memoHash', type: 'bytes32' }],
+    outputs: [
+      { name: 'data', type: 'bytes' },
+      { name: 'sender', type: 'address' },
+      { name: 'recipient', type: 'address' },
+      { name: 'createdAt', type: 'uint64' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'MAX_MEMO_BYTES',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'event',
+    name: 'MemoStored',
+    inputs: [
+      { name: 'memoHash', type: 'bytes32', indexed: true },
+      { name: 'sender', type: 'address', indexed: true },
+      { name: 'recipient', type: 'address', indexed: true },
+      { name: 'data', type: 'bytes', indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'MemoDeleted',
+    inputs: [
+      { name: 'memoHash', type: 'bytes32', indexed: true },
+      { name: 'recipient', type: 'address', indexed: true },
+    ],
+    anonymous: false,
+  },
+] as const

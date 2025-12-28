@@ -1,9 +1,15 @@
 'use client'
 
 import React from 'react'
-import { useConnection } from 'wagmi'
+import { useConnection, usePublicClient, useWriteContract } from 'wagmi'
+import { waitForTransactionReceipt } from 'wagmi/actions'
 import { tempoTestnet } from 'viem/chains'
+import { hexToString } from 'viem'
 import { isValidMemoId, MemoRecord } from '../lib/memo'
+import { decryptDataKey, decryptPayload, importPrivateKey, loadPrivateKey } from '../lib/crypto'
+import { MEMO_STORE_ADDRESS, memoStoreAbi } from '../lib/contracts'
+import { wagmiConfig } from '../lib/wagmi'
+import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
 
 type MemoViewerProps = {
   memoId: string
@@ -16,26 +22,114 @@ type MemoResponse = Pick<
 
 export function MemoViewer({ memoId }: MemoViewerProps) {
   const { address } = useConnection()
+  const publicClient = usePublicClient()
+  const { writeContractAsync } = useWriteContract()
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [actionStatus, setActionStatus] = React.useState<string | null>(null)
   const [data, setData] = React.useState<MemoResponse | null>(null)
+  const [source, setSource] = React.useState<'offchain' | 'onchain' | null>(null)
+
+  const loadOnchainMemo = async () => {
+    if (!MEMO_STORE_ADDRESS) {
+      throw new Error('Memo store is not configured.')
+    }
+    if (!address) {
+      throw new Error('Log in to decrypt this memo.')
+    }
+    if (!publicClient) {
+      throw new Error('Onchain client is not available.')
+    }
+
+    const storedKey = loadPrivateKey(address)
+    if (!storedKey) {
+      throw new Error('Missing local encryption key for this address.')
+    }
+
+    const privateKey = await importPrivateKey(storedKey.privateKeyJwk)
+    const [dataHex, sender, recipient, createdAt] = await publicClient.readContract({
+      address: MEMO_STORE_ADDRESS,
+      abi: memoStoreAbi,
+      functionName: 'getMemo',
+      args: [memoId as `0x${string}`],
+    })
+
+    if (!dataHex || dataHex === '0x') {
+      throw new Error('Memo not found onchain.')
+    }
+
+    const json = hexToString(dataHex as `0x${string}`)
+    const memo = JSON.parse(json) as OnchainEncryptedMemo
+    const keyEntry = memo.keys.find((entry) => entry.addr.toLowerCase() === address.toLowerCase())
+    if (!keyEntry) {
+      throw new Error('This address does not have access to the encrypted memo.')
+    }
+
+    const memoHash = memo.memoHash || (memoId as `0x${string}`)
+    const dataKey = await decryptDataKey(memoHash, privateKey, memo.senderPubKey, keyEntry.encKey, keyEntry.iv)
+    const payloadBytes = await decryptPayload(dataKey, memo.enc.iv, memo.enc.ciphertext)
+    const payloadText = new TextDecoder().decode(payloadBytes)
+    let payload: unknown = payloadText
+    try {
+      payload = JSON.parse(payloadText)
+    } catch {
+      payload = payloadText
+    }
+
+    const createdAtIso = typeof createdAt === 'bigint' && createdAt > BigInt(0)
+      ? new Date(Number(createdAt) * 1000).toISOString()
+      : memo.createdAt
+    const safeCreatedAt = createdAtIso && !Number.isNaN(Date.parse(createdAtIso))
+      ? createdAtIso
+      : new Date().toISOString()
+    const token = memo.token ?? { address: '0x0000000000000000000000000000000000000000', symbol: 'Unknown', decimals: 0 }
+
+    const result: MemoResponse = {
+      memoId: memoHash,
+      sender: sender as `0x${string}`,
+      recipient: recipient as `0x${string}`,
+      token,
+      amountBase: memo.amountDisplay,
+      amountDisplay: memo.amountDisplay,
+      txHash: undefined,
+      ivms: { schema: 'ivms-1', format: 'json', payload },
+      file: undefined,
+      invoice: undefined,
+      createdAt: safeCreatedAt,
+    }
+
+    return result
+  }
 
   const loadMemo = async () => {
     if (!address) return
     setIsLoading(true)
     setError(null)
+    setActionStatus(null)
     try {
       const response = await fetch(`/api/memos/${memoId}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address }),
       })
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
-        throw new Error(body?.error || 'Unable to access memo.')
+
+      if (response.ok) {
+        const payload = (await response.json()) as MemoResponse
+        setData(payload)
+        setSource('offchain')
+        return
       }
-      const payload = (await response.json()) as MemoResponse
-      setData(payload)
+
+      if (response.status === 404) {
+        const onchainPayload = await loadOnchainMemo()
+        setData(onchainPayload)
+        setSource('onchain')
+        return
+      }
+
+      const body = await response.json().catch(() => ({}))
+      throw new Error(body?.error || 'Unable to access memo.')
     } catch (err: any) {
       setError(err?.message ?? String(err))
     } finally {
@@ -43,8 +137,46 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
     }
   }
 
+  const deleteOnchainMemo = async () => {
+    if (!MEMO_STORE_ADDRESS) {
+      setError('Memo store is not configured.')
+      return
+    }
+    if (!address) {
+      setError('Log in to delete this memo.')
+      return
+    }
+
+    setIsDeleting(true)
+    setError(null)
+    setActionStatus('Deleting onchain memo…')
+    try {
+      const hash = await writeContractAsync({
+        address: MEMO_STORE_ADDRESS,
+        abi: memoStoreAbi,
+        functionName: 'deleteMemo',
+        args: [memoId as `0x${string}`],
+      })
+      setActionStatus('Waiting for confirmation…')
+      await waitForTransactionReceipt(wagmiConfig, { hash })
+      setActionStatus('Memo deleted.')
+      setData(null)
+      setSource(null)
+    } catch (err: any) {
+      setError(err?.message ?? String(err))
+      setActionStatus(null)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const explorerBase = tempoTestnet.blockExplorers?.default.url
   const txUrl = data?.txHash ? `${explorerBase}/tx/${data.txHash}` : undefined
+  const canDelete =
+    source === 'onchain' &&
+    !!address &&
+    !!data &&
+    data.recipient.toLowerCase() === address.toLowerCase()
 
   if (!isValidMemoId(memoId)) {
     return (
@@ -65,6 +197,15 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
         <div className="panel-header">
           <h3 className="panel-title">Memo vault</h3>
           <div className="panel-header-actions">
+            {canDelete && (
+              <button
+                className="btn btn-secondary"
+                disabled={isDeleting}
+                onClick={() => void deleteOnchainMemo()}
+              >
+                {isDeleting ? 'Deleting…' : 'Delete onchain memo'}
+              </button>
+            )}
             <button
               className="btn btn-primary"
               disabled={!address || isLoading}
@@ -88,6 +229,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
 
           {!address && <div className="muted">Log in to verify access.</div>}
           {error && <div className="error-text">{error}</div>}
+          {actionStatus && <div className="muted">{actionStatus}</div>}
 
           {data && (
             <>
@@ -123,9 +265,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
               <div className="card">
                 <div style={{ fontWeight: 600 }}>IVMS data</div>
                 {data.ivms.format === 'json' ? (
-                  <pre className="memo-json">
-                    {JSON.stringify(data.ivms.payload, null, 2)}
-                  </pre>
+                  <pre className="memo-json">{JSON.stringify(data.ivms.payload, null, 2)}</pre>
                 ) : (
                   <pre className="memo-json">{String(data.ivms.payload)}</pre>
                 )}
