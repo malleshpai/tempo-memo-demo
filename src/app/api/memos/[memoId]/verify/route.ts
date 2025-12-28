@@ -1,7 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { kv } from '@vercel/kv'
+import { list } from '@vercel/blob'
 import { isAddress, verifyMessage, type Hex } from 'viem'
 import { buildMemoAccessMessage, isValidMemoId, MemoRecord } from '../../../../../../lib/memo'
+
+async function loadRecord(memoId: string) {
+  const result = await list({ prefix: `memos/${memoId}/record.json` })
+  if (!result.blobs.length) return null
+  const latest = [...result.blobs].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0]
+  const response = await fetch(latest.downloadUrl)
+  if (!response.ok) return null
+  return (await response.json()) as MemoRecord
+}
 
 export async function POST(request: NextRequest, context: { params: Promise<{ memoId: string }> }) {
   const { memoId } = await context.params
@@ -26,12 +35,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ me
     return NextResponse.json({ error: 'Signature verification failed.' }, { status: 401 })
   }
 
-  const raw = await kv.get<string>(`memo:${memoId}`)
-  if (!raw) {
+  const record = await loadRecord(memoId)
+  if (!record) {
     return NextResponse.json({ error: 'Memo not found.' }, { status: 404 })
   }
 
-  const record = JSON.parse(raw) as MemoRecord
   const addressLc = address.toLowerCase()
   if (
     record.sender.toLowerCase() !== addressLc &&

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { kv } from '@vercel/kv'
 import { put } from '@vercel/blob'
 import { canonicalizeJson, hashMemo, IvmsPayload, isValidMemoId, MemoRecord } from '../../../../../lib/memo'
 
@@ -77,16 +76,16 @@ export async function POST(request: Request) {
   const createdAt = new Date().toISOString()
 
   if (file) {
-    const blob = await put(file.name, file, { access: 'public' })
+    const blob = await put(`memos/${memoId}/ivms-${file.name}`, file, { access: 'public' })
     fileInfo = {
       url: blob.url,
       filename: file.name,
       contentType: file.type || 'application/octet-stream',
     }
   } else {
-    const filename = `ivms-${memoId}.json`
+    const filename = 'ivms.json'
     const payloadBlob = new Blob([canonical], { type: 'application/json' })
-    const blob = await put(filename, payloadBlob, { access: 'public' })
+    const blob = await put(`memos/${memoId}/${filename}`, payloadBlob, { access: 'public' })
     fileInfo = {
       url: blob.url,
       filename,
@@ -112,7 +111,8 @@ export async function POST(request: Request) {
     createdAt,
   }
 
-  await kv.set(`memo:${memoId}`, JSON.stringify(record))
+  const recordBlob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' })
+  await put(`memos/${memoId}/record.json`, recordBlob, { access: 'public' })
 
   return NextResponse.json({ ok: true, memoId })
 }
