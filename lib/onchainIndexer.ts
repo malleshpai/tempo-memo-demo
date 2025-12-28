@@ -10,11 +10,45 @@ const INITIAL_LOOKBACK = BigInt(2000)
 type IndexState = {
   lastBlock?: number
   lastRun?: number
+  lastManualBlock?: number
+  lastManualRun?: number
 }
+
+type IndexMode = 'auto' | 'manual'
+
+type IndexerResult =
+  | {
+      ok: true
+      mode: IndexMode
+      fromBlock: string
+      toBlock: string
+      stored: number
+      deleted: number
+      chunks: number
+    }
+  | {
+      ok: true
+      mode: IndexMode
+      message: string
+    }
+  | {
+      ok: false
+      error: string
+    }
 
 const getToken = () => process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_ONLY_TOKEN
 
-const getIndexerConfig = () => {
+type IndexerConfig =
+  | {
+      token: string
+      memoStoreAddress: `0x${string}`
+    }
+  | {
+      error: string
+    }
+
+
+const getIndexerConfig = (): IndexerConfig => {
   const token = getToken()
   if (!token) return { error: 'Missing blob token.' }
   const memoStoreAddress = process.env.NEXT_PUBLIC_MEMO_STORE_ADDRESS
@@ -84,7 +118,46 @@ const writeSummary = async (token: string, address: string, memoId: string, payl
   })
 }
 
-export const runOnchainIndexer = async () => {
+const findBlockByTimestamp = async (client: ReturnType<typeof createPublicClient>, latestBlock: bigint, target: bigint) => {
+  if (target <= BigInt(0)) return BigInt(0)
+
+  let low = BigInt(0)
+  let high = latestBlock
+
+  while (low < high) {
+    const mid = (low + high) / BigInt(2)
+    const block = await client.getBlock({ blockNumber: mid })
+    if (block.timestamp < target) {
+      low = mid + BigInt(1)
+    } else {
+      high = mid
+    }
+  }
+
+  return low
+}
+
+const computeStartBlock = async (
+  mode: IndexMode,
+  client: ReturnType<typeof createPublicClient>,
+  latestBlock: bigint,
+  state: IndexState | null,
+) => {
+  if (mode === 'manual') {
+    if (state?.lastManualBlock) {
+      return BigInt(state.lastManualBlock) + BigInt(1)
+    }
+    const target = BigInt(Math.floor(Date.now() / 1000) - 86400)
+    return findBlockByTimestamp(client, latestBlock, target)
+  }
+
+  if (state?.lastBlock) {
+    return BigInt(state.lastBlock) + BigInt(1)
+  }
+  return latestBlock > INITIAL_LOOKBACK ? latestBlock - INITIAL_LOOKBACK : BigInt(0)
+}
+
+export const runOnchainIndexer = async (mode: IndexMode = 'auto'): Promise<IndexerResult> => {
   const config = getIndexerConfig()
   if ('error' in config) {
     return { ok: false, error: config.error }
@@ -94,86 +167,114 @@ export const runOnchainIndexer = async () => {
   const client = createPublicClient({ transport: http(RPC_URL) })
   const latestBlock = await client.getBlockNumber()
   const state = await loadState(token)
-  const lastBlock = state?.lastBlock ? BigInt(state.lastBlock) : null
 
-  const start = lastBlock
-    ? lastBlock + BigInt(1)
-    : latestBlock > INITIAL_LOOKBACK
-      ? latestBlock - INITIAL_LOOKBACK
-      : BigInt(0)
+  let start = await computeStartBlock(mode, client, latestBlock, state)
   if (start > latestBlock) {
-    await saveState(token, { lastBlock: Number(latestBlock), lastRun: Date.now() })
-    return { ok: true, message: 'No new blocks.' }
+    const updatedState: IndexState = { ...state }
+    if (mode === 'manual') {
+      updatedState.lastManualBlock = Number(latestBlock)
+      updatedState.lastManualRun = Date.now()
+    } else {
+      updatedState.lastBlock = Number(latestBlock)
+      updatedState.lastRun = Date.now()
+    }
+    await saveState(token, updatedState)
+    return { ok: true, mode, message: 'No new blocks.' }
   }
-
-  const end =
-    start + MAX_BLOCK_RANGE - BigInt(1) > latestBlock
-      ? latestBlock
-      : start + MAX_BLOCK_RANGE - BigInt(1)
 
   const storedEvent = parseAbiItem(
     'event MemoStored(bytes32 indexed memoHash, address indexed sender, address indexed recipient, bytes data)',
   )
   const deletedEvent = parseAbiItem('event MemoDeleted(bytes32 indexed memoHash, address indexed recipient)')
 
-  const [storedLogs, deletedLogs] = await Promise.all([
-    client.getLogs({
-      address: memoStoreAddress,
-      event: storedEvent,
-      fromBlock: start,
-      toBlock: end,
-    }),
-    client.getLogs({
-      address: memoStoreAddress,
-      event: deletedEvent,
-      fromBlock: start,
-      toBlock: end,
-    }),
-  ])
+  let storedCount = 0
+  let deletedCount = 0
+  let chunks = 0
+  const initialStart = start
+  let end = start
 
-  for (const log of storedLogs) {
-    const memoHash = log.args.memoHash as `0x${string}` | undefined
-    const sender = (log.args.sender as string | undefined) ?? ''
-    const recipient = (log.args.recipient as string | undefined) ?? ''
-    const dataHex = log.args.data as `0x${string}` | undefined
-    if (!memoHash || !sender || !recipient || !dataHex) continue
-    const memo = parseMemo(dataHex)
-    if (!memo) continue
+  while (start <= latestBlock) {
+    end =
+      start + MAX_BLOCK_RANGE - BigInt(1) > latestBlock
+        ? latestBlock
+        : start + MAX_BLOCK_RANGE - BigInt(1)
 
-    const summary = buildSummary(memoHash, sender, recipient, memo, log.transactionHash as `0x${string}`)
-    await Promise.all([
-      writeSummary(token, sender.toLowerCase(), memoHash, {
-        ...summary,
-        role: 'sender',
-        counterparty: recipient,
+    const [storedLogs, deletedLogs] = await Promise.all([
+      client.getLogs({
+        address: memoStoreAddress,
+        event: storedEvent,
+        fromBlock: start,
+        toBlock: end,
       }),
-      writeSummary(token, recipient.toLowerCase(), memoHash, {
-        ...summary,
-        role: 'recipient',
-        counterparty: sender,
+      client.getLogs({
+        address: memoStoreAddress,
+        event: deletedEvent,
+        fromBlock: start,
+        toBlock: end,
       }),
     ])
+
+    storedCount += storedLogs.length
+    deletedCount += deletedLogs.length
+
+    for (const log of storedLogs) {
+      const memoHash = log.args.memoHash as `0x${string}` | undefined
+      const sender = (log.args.sender as string | undefined) ?? ''
+      const recipient = (log.args.recipient as string | undefined) ?? ''
+      const dataHex = log.args.data as `0x${string}` | undefined
+      if (!memoHash || !sender || !recipient || !dataHex) continue
+      const memo = parseMemo(dataHex)
+      if (!memo) continue
+
+      const summary = buildSummary(memoHash, sender, recipient, memo, log.transactionHash as `0x${string}`)
+      await Promise.all([
+        writeSummary(token, sender.toLowerCase(), memoHash, {
+          ...summary,
+          role: 'sender',
+          counterparty: recipient,
+        }),
+        writeSummary(token, recipient.toLowerCase(), memoHash, {
+          ...summary,
+          role: 'recipient',
+          counterparty: sender,
+        }),
+      ])
+    }
+
+    for (const log of deletedLogs) {
+      const memoHash = log.args.memoHash as `0x${string}` | undefined
+      const recipient = (log.args.recipient as string | undefined) ?? ''
+      if (!memoHash || !recipient) continue
+      await writeSummary(token, recipient.toLowerCase(), memoHash, { memoId: memoHash, deleted: true })
+    }
+
+    chunks += 1
+    if (end === latestBlock) break
+    start = end + BigInt(1)
   }
 
-  for (const log of deletedLogs) {
-    const memoHash = log.args.memoHash as `0x${string}` | undefined
-    const recipient = (log.args.recipient as string | undefined) ?? ''
-    if (!memoHash || !recipient) continue
-    await writeSummary(token, recipient.toLowerCase(), memoHash, { memoId: memoHash, deleted: true })
+  const updatedState: IndexState = { ...state }
+  if (mode === 'manual') {
+    updatedState.lastManualBlock = Number(end)
+    updatedState.lastManualRun = Date.now()
+  } else {
+    updatedState.lastBlock = Number(end)
+    updatedState.lastRun = Date.now()
   }
-
-  await saveState(token, { lastBlock: Number(end), lastRun: Date.now() })
+  await saveState(token, updatedState)
 
   return {
     ok: true,
-    fromBlock: start.toString(),
+    mode,
+    fromBlock: initialStart.toString(),
     toBlock: end.toString(),
-    stored: storedLogs.length,
-    deleted: deletedLogs.length,
+    stored: storedCount,
+    deleted: deletedCount,
+    chunks,
   }
 }
 
-export const maybeRefreshOnchainIndex = async (minIntervalMs = 2 * 60 * 1000) => {
+export const maybeRefreshOnchainIndex = async (minIntervalMs = 2 * 60 * 1000): Promise<IndexerResult> => {
   const config = getIndexerConfig()
   if ('error' in config) {
     return { ok: false, error: config.error }
@@ -182,8 +283,8 @@ export const maybeRefreshOnchainIndex = async (minIntervalMs = 2 * 60 * 1000) =>
   const state = await loadState(config.token)
   const lastRun = state?.lastRun ?? 0
   if (Date.now() - lastRun < minIntervalMs) {
-    return { ok: true, skipped: true }
+    return { ok: true, mode: 'auto', message: 'Skipped.' }
   }
 
-  return runOnchainIndexer()
+  return runOnchainIndexer('auto')
 }

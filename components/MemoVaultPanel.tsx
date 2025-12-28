@@ -33,6 +33,9 @@ export function MemoVaultPanel() {
   const [items, setItems] = React.useState<MemoSummary[]>([])
   const [error, setError] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
+  const [refreshError, setRefreshError] = React.useState<string | null>(null)
+  const [refreshNote, setRefreshNote] = React.useState<string | null>(null)
   const [showDialog, setShowDialog] = React.useState(false)
   const [memoInput, setMemoInput] = React.useState('')
   const [dialogError, setDialogError] = React.useState<string | null>(null)
@@ -42,6 +45,28 @@ export function MemoVaultPanel() {
   const [amountMin, setAmountMin] = React.useState('')
   const [amountMax, setAmountMax] = React.useState('')
   const [dateFilter, setDateFilter] = React.useState('all')
+
+  const loadMemos = React.useCallback(async () => {
+    if (!address) {
+      setItems([])
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/memos/by-address/${address}`)
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Unable to load memos.')
+      }
+      setItems(data.items ?? [])
+    } catch (err: any) {
+      setError(err?.message ?? String(err))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [address])
 
   React.useEffect(() => {
     if (!address) {
@@ -78,6 +103,32 @@ export function MemoVaultPanel() {
       cancelled = true
     }
   }, [address])
+
+  const refreshLatest = async () => {
+    if (!address) return
+    setIsRefreshing(true)
+    setRefreshError(null)
+    setRefreshNote(null)
+    try {
+      const response = await fetch('/api/indexer/onchain?mode=manual')
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error || 'Unable to refresh memos.')
+      }
+      if (data?.message) {
+        setRefreshNote(data.message)
+      } else if (typeof data?.stored === 'number') {
+        setRefreshNote(`Indexed ${data.stored} memo${data.stored === 1 ? '' : 's'}.`)
+      } else {
+        setRefreshNote('Index complete.')
+      }
+      await loadMemos()
+    } catch (err: any) {
+      setRefreshError(err?.message ?? String(err))
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const tokens = React.useMemo(() => {
     const set = new Set<string>()
@@ -150,11 +201,22 @@ export function MemoVaultPanel() {
           <button className="btn btn-secondary" onClick={openDialog} type="button">
             Retrieve onchain memo
           </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => void refreshLatest()}
+            type="button"
+            disabled={!address || isRefreshing}
+          >
+            {isRefreshing ? 'Fetching…' : 'Fetch latest memos'}
+          </button>
           <span className="muted" style={{ fontSize: 12 }}>
             {address ? 'Latest memos for this address' : 'Log in to view memos'}
           </span>
         </div>
       </div>
+
+      {address && refreshNote && <div className="muted">{refreshNote}</div>}
+      {address && refreshError && <div className="error-text">{refreshError}</div>}
 
       {address && (
         <div className="vault-filters">
