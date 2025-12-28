@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { list } from '@vercel/blob'
 import { isAddress } from 'viem'
+import { maybeRefreshOnchainIndex } from '../../../../../lib/onchainIndexer'
 
 const normalizeAddress = (value: string) => value.toLowerCase()
 
@@ -27,6 +28,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ ad
     }
 
     const normalized = normalizeAddress(address)
+    await maybeRefreshOnchainIndex()
     const items = await loadSummaries(normalized)
     const sorted = items
       .filter((item) => item && item.memoId && !item.deleted)
