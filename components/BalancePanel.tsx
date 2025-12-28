@@ -41,7 +41,7 @@ export function BalancePanel() {
     return { token, balance }
   })
 
-  const hasAnyBalance = balances.some(({ balance }) => balance > 0n)
+  const hasAnyBalance = balances.some(({ balance }) => balance > BigInt(0))
 
   const requestFunds = async () => {
     if (!address) return

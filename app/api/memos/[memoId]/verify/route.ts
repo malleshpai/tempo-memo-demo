@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { kv } from '@vercel/kv'
-import { isAddress, verifyMessage } from 'viem'
+import { isAddress, verifyMessage, type Hex } from 'viem'
 import { buildMemoAccessMessage, isValidMemoId, MemoRecord } from '../../../../../lib/memo'
 
-export async function POST(request: Request, context: { params: { memoId: string } }) {
-  const memoId = context.params.memoId
+export async function POST(request: NextRequest, context: { params: Promise<{ memoId: string }> }) {
+  const { memoId } = await context.params
   if (!isValidMemoId(memoId)) {
     return NextResponse.json({ error: 'Invalid memo ID.' }, { status: 400 })
   }
@@ -21,7 +21,7 @@ export async function POST(request: Request, context: { params: { memoId: string
   }
 
   const message = buildMemoAccessMessage(memoId, address)
-  const isValid = await verifyMessage({ address, message, signature })
+  const isValid = await verifyMessage({ address, message, signature: signature as Hex })
   if (!isValid) {
     return NextResponse.json({ error: 'Signature verification failed.' }, { status: 401 })
   }

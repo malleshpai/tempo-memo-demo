@@ -195,7 +195,7 @@ export function TransferPanel() {
         <div className="field-row">
           <label className="field">
             <span>Token</span>
-            <select value={tokenAddress} onChange={(event) => setTokenAddress(event.target.value)}>
+            <select value={tokenAddress} onChange={(event) => setTokenAddress(event.target.value as `0x${string}`)}>
               {tokenList.map((item) => (
                 <option key={item.address} value={item.address}>
                   {item.symbol}
