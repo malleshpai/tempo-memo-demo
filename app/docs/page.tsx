@@ -32,65 +32,76 @@ function DocsContent() {
         <div className="card">
           <div style={{ fontWeight: 600 }}>Overview</div>
           <div className="muted" style={{ marginTop: 8 }}>
-            This demo shows Tempo TIP-20 transfers with reconciliation memos. It supports offchain
-            IVMS data storage (hash onchain) and onchain encrypted memo storage with key sharing for
-            sender, recipient, and regulator.
+            Tempo Memo lets you send TIP-20 transfers with travel rule metadata. Each transfer
+            uses a memo hash, and the memo data can be stored offchain (Blob) or encrypted onchain.
+            Memo links are shareable via /0x... and only the sender or recipient can decrypt.
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontWeight: 600 }}>User flows</div>
+          <div style={{ fontWeight: 600 }}>Quick start</div>
           <div className="stack-sm" style={{ marginTop: 8 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>1) Login</div>
+              <div style={{ fontWeight: 600 }}>1) Log in</div>
+              <div className="muted">Passkey login through Tempo accounts. Sign up attempts a faucet fund.</div>
+            </div>
+            <div>
+              <div style={{ fontWeight: 600 }}>2) Register</div>
               <div className="muted">
-                Passkey login via Tempo accounts. Faucet funding is attempted during sign up.
+                In the Register tab, generate and register your P-256 encryption key. This is required
+                for onchain encrypted memos and stored locally per address.
               </div>
             </div>
             <div>
-              <div style={{ fontWeight: 600 }}>2) Register encryption key</div>
+              <div style={{ fontWeight: 600 }}>3) Send</div>
               <div className="muted">
-                Generates a local P-256 keypair and registers the public key onchain in the
-                PublicKeyRegistry. The private key is stored in localStorage per address.
+                Enter destination, token, amount, and IVMS data (upload or form). The app hashes the
+                canonical IVMS payload into a 32-byte memo that goes into transferWithMemo.
               </div>
             </div>
             <div>
-              <div style={{ fontWeight: 600 }}>3) Send memo transfer</div>
+              <div style={{ fontWeight: 600 }}>4) Share</div>
               <div className="muted">
-                Fill destination, token, amount, and IVMS data (upload or form). The app computes
-                a canonical IVMS JSON string, hashes it, and uses it as the TIP-20 transfer memo.
+                Use the memo hash URL /0x... to open the memo viewer. Sender or recipient can verify
+                and decrypt the memo.
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontWeight: 600 }}>App modes</div>
+          <div className="stack-sm" style={{ marginTop: 8 }}>
+            <div><span style={{ fontWeight: 600 }}>Send</span> — create transfers, attach IVMS, and choose onchain vs offchain.</div>
+            <div><span style={{ fontWeight: 600 }}>Register</span> — generate + register your encryption key for onchain memos.</div>
+            <div><span style={{ fontWeight: 600 }}>Memo Vault</span> — browse incoming/outgoing memos with filters and onchain lookup.</div>
+            <div><span style={{ fontWeight: 600 }}>Regulator mode</span> — password-protected access to onchain memos (and offchain list).</div>
+            <div><span style={{ fontWeight: 600 }}>Docs</span> — this page.</div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontWeight: 600 }}>Onchain vs offchain</div>
+          <div className="stack-sm" style={{ marginTop: 8 }}>
+            <div><span style={{ fontWeight: 600 }}>Offchain</span> — IVMS payload + files are stored in Vercel Blob. The onchain transfer memo is the hash only.</div>
+            <div><span style={{ fontWeight: 600 }}>Onchain encrypted</span> — the IVMS payload is encrypted with a one-time symmetric key, and the encrypted JSON is stored in MemoStore (max 2048 bytes).</div>
+            <div><span style={{ fontWeight: 600 }}>Key sharing</span> — the symmetric key is wrapped for sender, recipient, and regulator using ECDH-P256 + HKDF-SHA256.</div>
+            <div><span style={{ fontWeight: 600 }}>Invoice PDF</span> — supported offchain only.</div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ fontWeight: 600 }}>Vault and indexing</div>
+          <div className="stack-sm" style={{ marginTop: 8 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>4) Offchain memo</div>
               <div className="muted">
-                If onchain encryption is off, the IVMS payload + files are stored in Vercel Blob.
-                The memo hash is used as the locator.
+                The vault reads summaries from Blob. The indexer writes summaries for sender, recipient,
+                and regulator when it scans onchain memos.
               </div>
             </div>
-            <div>
-              <div style={{ fontWeight: 600 }}>5) Onchain encrypted memo</div>
-              <div className="muted">
-                If enabled, the IVMS payload is encrypted with a one-time symmetric key. The
-                symmetric key is wrapped to sender, recipient, and regulator using ECDH-P256 +
-                HKDF-SHA256. The encrypted JSON is stored onchain in MemoStore and referenced by
-                the same memo hash used in transferWithMemo.
-              </div>
-            </div>
-            <div>
-              <div style={{ fontWeight: 600 }}>6) View memo</div>
-              <div className="muted">
-                Navigate to /0x... (memo hash). If you are sender or recipient, the app can decrypt the
-                onchain memo (or show the offchain memo if stored).
-              </div>
-            </div>
-            <div>
-              <div style={{ fontWeight: 600 }}>7) Regulator access</div>
-              <div className="muted">
-                /regulator is password-protected and can decrypt any onchain memo that includes the
-                regulator key entry.
-              </div>
-            </div>
+            <div><span style={{ fontWeight: 600 }}>Fetch latest memos</span> — manual refresh runs the indexer since last run (or last day).</div>
+            <div><span style={{ fontWeight: 600 }}>Daily cron</span> — an auto indexer runs once per day on Vercel.</div>
+            <div><span style={{ fontWeight: 600 }}>Filters</span> — source, sender, asset, amount range, and date range.</div>
           </div>
         </div>
 
@@ -129,14 +140,9 @@ function DocsContent() {
     { addr, iv, encKey } // recipient
     { addr, iv, encKey } // regulator (optional)
   ]
-}`}
-          </pre>
-          <div className="muted">
-            The JSON is encoded and stored as bytes in MemoStore. Max size is 2048 bytes.
-          </div>
+}`}</pre>
+          <div className="muted">The JSON is encoded and stored as bytes in MemoStore. Max size is 2048 bytes.</div>
         </div>
-
-        
 
         <div className="card">
           <div style={{ fontWeight: 600 }}>Deployed addresses (Tempo Testnet)</div>
@@ -160,22 +166,12 @@ function DocsContent() {
           <div style={{ fontWeight: 600 }}>Smart contracts</div>
           <div className="stack-sm" style={{ marginTop: 8 }}>
             <div><span style={{ fontWeight: 600 }}>PublicKeyRegistry</span> — stores encryption keys per address.</div>
-            <div className="muted">
-              setKey(bytes key, uint8 keyType, uint32 version) — registers a public key.
-            </div>
-            <div className="muted">
-              getKey(address owner) returns (bytes key, uint8 keyType, uint32 version).
-            </div>
+            <div className="muted">setKey(bytes key, uint8 keyType, uint32 version) — registers a public key.</div>
+            <div className="muted">getKey(address owner) returns (bytes key, uint8 keyType, uint32 version).</div>
             <div><span style={{ fontWeight: 600 }}>MemoStore</span> — stores encrypted memo blobs by memo hash.</div>
-            <div className="muted">
-              putMemo(bytes32 memoHash, bytes data, address sender, address recipient).
-            </div>
-            <div className="muted">
-              deleteMemo(bytes32 memoHash) — only recipient can delete.
-            </div>
-            <div className="muted">
-              getMemo(bytes32 memoHash) returns (bytes data, address sender, address recipient, uint64 createdAt).
-            </div>
+            <div className="muted">putMemo(bytes32 memoHash, bytes data, address sender, address recipient).</div>
+            <div className="muted">deleteMemo(bytes32 memoHash) — only recipient can delete.</div>
+            <div className="muted">getMemo(bytes32 memoHash) returns (bytes data, address sender, address recipient, uint64 createdAt).</div>
             <div className="muted">MAX_MEMO_BYTES = 2048.</div>
           </div>
         </div>
@@ -194,8 +190,8 @@ function DocsContent() {
         <div className="card">
           <div style={{ fontWeight: 600 }}>Security notes</div>
           <div className="muted" style={{ marginTop: 8 }}>
-            Regulator private key is currently exposed to the client for demo purposes. In a
-            production deployment this should move server-side and be protected by proper auth.
+            The regulator private key is exposed to the client for demo purposes only. In production,
+            it should be protected server-side with proper authentication and access controls.
           </div>
         </div>
       </div>
