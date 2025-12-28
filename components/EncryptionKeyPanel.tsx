@@ -10,6 +10,8 @@ export function EncryptionKeyPanel() {
   const [localKey, setLocalKey] = React.useState<ReturnType<typeof loadPrivateKey> | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [isRegistering, setIsRegistering] = React.useState(false)
+  const [txHash, setTxHash] = React.useState<string | null>(null)
+  const [status, setStatus] = React.useState<string | null>(null)
 
   const registryEnabled = Boolean(address && PUBLIC_KEY_REGISTRY_ADDRESS)
   const { data, refetch, isFetching } = useReadContract({
@@ -33,18 +35,25 @@ export function EncryptionKeyPanel() {
   const onRegister = async () => {
     if (!address || !PUBLIC_KEY_REGISTRY_ADDRESS) return
     setError(null)
+    setStatus(null)
+    setTxHash(null)
     setIsRegistering(true)
     try {
       const keyPair = await generateKeyPair()
       savePrivateKey(address, keyPair)
-      await writeContractAsync({
+      setStatus('Submitting registration…')
+      const hash = await writeContractAsync({
         address: PUBLIC_KEY_REGISTRY_ADDRESS,
         abi: publicKeyRegistryAbi,
         functionName: 'setKey',
         args: [keyPair.publicKeyHex, KEY_TYPE_P256, keyPair.version],
+        gas: BigInt(250000),
       })
+      setTxHash(hash)
+      setStatus('Registration submitted. Refreshing status…')
       setLocalKey(keyPair)
       await refetch()
+      setStatus('Registration complete.')
     } catch (err: any) {
       setError(err?.message ?? String(err))
     } finally {
@@ -86,6 +95,12 @@ export function EncryptionKeyPanel() {
           {!hasLocalKey && isRegistered && (
             <div className="error-text">
               This device cannot decrypt existing memos. Generate a new key if needed.
+            </div>
+          )}
+          {status && <div className="muted">{status}</div>}
+          {txHash && (
+            <div className="muted" style={{ fontSize: 12 }}>
+              Tx: <a href={`https://explore.tempo.xyz/tx/${txHash}`} target="_blank" rel="noreferrer">{txHash}</a>
             </div>
           )}
           {error && <div className="error-text">{error}</div>}
