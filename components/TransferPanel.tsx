@@ -46,6 +46,7 @@ export function TransferPanel() {
   const [memoResult, setMemoResult] = React.useState<{
     memoId: `0x${string}`
     txHash?: `0x${string}`
+    memoTxHash?: `0x${string}`
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
@@ -180,6 +181,7 @@ export function TransferPanel() {
     }
     const parsedAmount = parseUnits(amount, token.decimals)
     setIsSubmitting(true)
+    let memoTxHash: `0x${string}` | undefined
     try {
       setStatus('Submitting transfer…')
       if (useOnchain) {
@@ -264,12 +266,15 @@ export function TransferPanel() {
         }
 
         setStatus('Storing encrypted memo onchain…')
-        await writeContractAsync({
+        const memoTransactionHash = await writeContractAsync({
           address: MEMO_STORE_ADDRESS,
           abi: memoStoreAbi,
           functionName: 'putMemo',
           args: [memoId, bytesToHex(encodeJson(onchainMemo)), address as `0x${string}`, toAddress as `0x${string}`],
         })
+        setStatus('Waiting for memo transaction confirmation…')
+        const memoReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: memoTransactionHash })
+        memoTxHash = memoReceipt.transactionHash
       }
 
       const hash = await Actions.token.transfer(wagmiConfig, {
@@ -312,7 +317,7 @@ export function TransferPanel() {
         }
       }
 
-      setMemoResult({ memoId, txHash: receipt.transactionHash })
+      setMemoResult({ memoId, txHash: receipt.transactionHash, memoTxHash })
       setStatus('Transfer completed.')
     } catch (err: any) {
       setError(err?.message ?? String(err))
@@ -325,6 +330,9 @@ export function TransferPanel() {
   const explorerBase = tempoTestnet.blockExplorers?.default.url
   const txUrl = memoResult?.txHash
     ? `${explorerBase}/tx/${memoResult.txHash}`
+    : undefined
+  const memoTxUrl = memoResult?.memoTxHash
+    ? `${explorerBase}/tx/${memoResult.memoTxHash}`
     : undefined
 
   return (
@@ -466,7 +474,12 @@ export function TransferPanel() {
               <div className="mono">Memo: {memoResult.memoId}</div>
               {txUrl && (
                 <a href={txUrl} target="_blank" rel="noreferrer">
-                  View transaction
+                  View transfer transaction
+                </a>
+              )}
+              {memoTxUrl && (
+                <a href={memoTxUrl} target="_blank" rel="noreferrer">
+                  View memo posting transaction
                 </a>
               )}
               <a href={`/${memoResult.memoId}`}>
