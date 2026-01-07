@@ -74,11 +74,27 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
     const dataKey = await decryptDataKey(memoHash, privateKey, memo.senderPubKey, keyEntry.encKey, keyEntry.iv)
     const payloadBytes = await decryptPayload(dataKey, memo.enc.iv, memo.enc.ciphertext)
     const payloadText = new TextDecoder().decode(payloadBytes)
-    let payload: unknown = payloadText
+    let decryptedPayload: unknown = payloadText
     try {
-      payload = JSON.parse(payloadText)
+      decryptedPayload = JSON.parse(payloadText)
     } catch {
-      payload = payloadText
+      decryptedPayload = payloadText
+    }
+
+    // Check if the decrypted payload is already an IvmsPayload structure
+    let ivms: MemoResponse['ivms']
+    if (
+      decryptedPayload &&
+      typeof decryptedPayload === 'object' &&
+      'schema' in decryptedPayload &&
+      'format' in decryptedPayload &&
+      'payload' in decryptedPayload
+    ) {
+      // Already in IvmsPayload format, use it directly
+      ivms = decryptedPayload as MemoResponse['ivms']
+    } else {
+      // Wrap it in the expected format
+      ivms = { schema: 'ivms-1', format: 'json', payload: decryptedPayload }
     }
 
     const createdAtIso = typeof createdAt === 'bigint' && createdAt > BigInt(0)
@@ -97,7 +113,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
       amountBase: memo.amountDisplay,
       amountDisplay: memo.amountDisplay,
       txHash: undefined,
-      ivms: { schema: 'ivms-1', format: 'json', payload },
+      ivms,
       file: undefined,
       invoice: undefined,
       createdAt: safeCreatedAt,
