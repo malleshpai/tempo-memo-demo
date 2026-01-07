@@ -1,14 +1,14 @@
 'use client'
 
 import React from 'react'
-import { parseUnits, isAddress, stringToHex } from 'viem'
+import { parseUnits, isAddress } from 'viem'
 import { tempoTestnet } from 'viem/chains'
 import { Actions } from 'tempo.ts/wagmi'
 import { useConnection, usePublicClient, useWriteContract } from 'wagmi'
 import { waitForTransactionReceipt } from 'wagmi/actions'
 import { TOKENS, DEFAULT_TRANSFER_TOKEN } from '../lib/constants'
 import { KEY_TYPE_P256, MEMO_STORE_ADDRESS, PUBLIC_KEY_REGISTRY_ADDRESS, REGULATOR_PUBLIC_KEY_HEX, REGULATOR_ADDRESS, memoStoreAbi, publicKeyRegistryAbi } from '../lib/contracts'
-import { encryptDataKeyFor, encryptPayload, importPrivateKey, loadPrivateKey } from '../lib/crypto'
+import { encryptDataKeyFor, encryptPayload, importPrivateKey, loadPrivateKey, bytesToHex, encodeJson } from '../lib/crypto'
 import { OnchainEncryptedMemo, onchainMemoSize } from '../lib/onchainMemo'
 import { canonicalizeJson, hashMemo, IvmsPayload } from '../lib/memo'
 import { wagmiConfig } from '../lib/wagmi'
@@ -268,7 +268,7 @@ export function TransferPanel() {
           address: MEMO_STORE_ADDRESS,
           abi: memoStoreAbi,
           functionName: 'putMemo',
-          args: [memoId, stringToHex(JSON.stringify(onchainMemo)), address as `0x${string}`, toAddress as `0x${string}`],
+          args: [memoId, bytesToHex(encodeJson(onchainMemo)), address as `0x${string}`, toAddress as `0x${string}`],
         })
       }
 
