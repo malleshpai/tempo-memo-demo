@@ -1,8 +1,10 @@
 'use client'
 
 import React from 'react'
-import { parseUnits, isAddress, stringToHex, padHex } from 'viem'
-import { tempoModerato } from '../lib/wagmi'
+import { parseUnits, isAddress, stringToHex, padHex, encodeFunctionData } from 'viem'
+import { sendCallsSync } from 'viem/actions'
+import { getConnectorClient } from 'wagmi/actions'
+import { tempoModerato, wagmiConfig } from '../lib/wagmi'
 import { Hooks } from 'wagmi/tempo'
 import { useConnection, usePublicClient, useWriteContract, useWalletClient } from 'wagmi'
 import { waitForTransactionReceipt } from 'wagmi/actions'
@@ -12,7 +14,6 @@ import { LocatorType, MEMO_VERSION, type CreateMemoHeaderParams } from '../lib/p
 import { encryptDataKeyFor, encryptPayload, importPrivateKey, loadPrivateKey, bytesToHex, encodeJson } from '../lib/crypto'
 import { OnchainEncryptedMemoV2, onchainMemoSize, MAX_ADDITIONAL_INFO_BYTES } from '../lib/onchainMemo'
 import { canonicalizeJson, hashMemo, IvmsPayload } from '../lib/memo'
-import { wagmiConfig } from '../lib/wagmi'
 import { IvmsForm, IvmsFormData } from './IvmsForm'
 import { IvmsPreview } from './IvmsPreview'
 
@@ -462,7 +463,7 @@ export function TransferPanel() {
 
       // ============ TX 2: Public Memo Header ============
       const shouldCreateHeader = headerReady && PUBLIC_MEMO_HEADER_ADDRESS && (useOnchain || (senderIdentifier && recipientIdentifier))
-      if (shouldCreateHeader && PUBLIC_MEMO_HEADER_ADDRESS && walletClient) {
+      if (shouldCreateHeader && PUBLIC_MEMO_HEADER_ADDRESS) {
         setTxProgress(prev => ({ ...prev, header: { status: 'sending' } }))
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
         const locatorUrl = useOnchain ? '' : `${baseUrl}/${memoId}`
@@ -482,34 +483,42 @@ export function TransferPanel() {
           version: MEMO_VERSION,
         }
 
-        // Use walletClient.writeContract directly instead of wagmi hook
-        const headerHash = await walletClient.writeContract({
-          address: PUBLIC_MEMO_HEADER_ADDRESS,
-          abi: publicMemoHeaderAbi,
-          functionName: 'createMemoHeader',
-          args: [headerParams],
-          chain: tempoModerato,
+        // Use sendCallsSync for proper Tempo AA support
+        const client = await getConnectorClient(wagmiConfig, { account: address as `0x${string}` })
+        const headerResult = await sendCallsSync(client, {
+          account: address as `0x${string}`,
+          calls: [
+            {
+              to: PUBLIC_MEMO_HEADER_ADDRESS,
+              abi: publicMemoHeaderAbi,
+              functionName: 'createMemoHeader',
+              args: [headerParams],
+            },
+          ],
+          capabilities: { sync: true },
         })
-        setTxProgress(prev => ({ ...prev, header: { status: 'sent', hash: headerHash } }))
-        const headerReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: headerHash })
-        headerTxHash = headerReceipt.transactionHash
+        headerTxHash = headerResult.receipts?.[0]?.transactionHash
         setTxProgress(prev => ({ ...prev, header: { status: 'confirmed', hash: headerTxHash } }))
       }
 
       // ============ TX 3: Encrypted Memo (MemoStore) ============
-      if (useOnchain && onchainMemoData && MEMO_STORE_ADDRESS && walletClient) {
+      if (useOnchain && onchainMemoData && MEMO_STORE_ADDRESS) {
         setTxProgress(prev => ({ ...prev, memo: { status: 'sending' } }))
-        // Use walletClient.writeContract directly instead of wagmi hook
-        const memoHash = await walletClient.writeContract({
-          address: MEMO_STORE_ADDRESS,
-          abi: memoStoreAbi,
-          functionName: 'putMemo',
-          args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
-          chain: tempoModerato,
+        // Use sendCallsSync for proper Tempo AA support
+        const client = await getConnectorClient(wagmiConfig, { account: address as `0x${string}` })
+        const memoResult = await sendCallsSync(client, {
+          account: address as `0x${string}`,
+          calls: [
+            {
+              to: MEMO_STORE_ADDRESS,
+              abi: memoStoreAbi,
+              functionName: 'putMemo',
+              args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
+            },
+          ],
+          capabilities: { sync: true },
         })
-        setTxProgress(prev => ({ ...prev, memo: { status: 'sent', hash: memoHash } }))
-        const memoReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: memoHash })
-        memoTxHash = memoReceipt.transactionHash
+        memoTxHash = memoResult.receipts?.[0]?.transactionHash
         setTxProgress(prev => ({ ...prev, memo: { status: 'confirmed', hash: memoTxHash } }))
       }
 
