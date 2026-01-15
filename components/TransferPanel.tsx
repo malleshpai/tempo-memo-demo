@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { parseUnits, isAddress, stringToHex, padHex, encodeFunctionData } from 'viem'
+import { parseUnits, isAddress, stringToHex, padHex } from 'viem'
 import { sendCallsSync } from 'viem/actions'
 import { getConnectorClient } from 'wagmi/actions'
 import { tempoModerato, wagmiConfig } from '../lib/wagmi'
@@ -485,19 +485,15 @@ export function TransferPanel() {
 
         // Use sendCallsSync for proper Tempo AA support
         const client = await getConnectorClient(wagmiConfig, { account: address as `0x${string}` })
-        const headerCallData = encodeFunctionData({
-          abi: publicMemoHeaderAbi,
-          functionName: 'createMemoHeader',
-          args: [headerParams],
-        })
         const headerResult = await sendCallsSync(client, {
           account: address as `0x${string}`,
           calls: [
             {
               to: PUBLIC_MEMO_HEADER_ADDRESS,
-              data: headerCallData,
-              gas: BigInt(200000), // Explicit gas limit for AA transactions
-            } as any,
+              abi: publicMemoHeaderAbi,
+              functionName: 'createMemoHeader',
+              args: [headerParams],
+            },
           ],
           capabilities: { sync: true },
         })
@@ -510,19 +506,15 @@ export function TransferPanel() {
         setTxProgress(prev => ({ ...prev, memo: { status: 'sending' } }))
         // Use sendCallsSync for proper Tempo AA support
         const client = await getConnectorClient(wagmiConfig, { account: address as `0x${string}` })
-        const memoCallData = encodeFunctionData({
-          abi: memoStoreAbi,
-          functionName: 'putMemo',
-          args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
-        })
         const memoResult = await sendCallsSync(client, {
           account: address as `0x${string}`,
           calls: [
             {
               to: MEMO_STORE_ADDRESS,
-              data: memoCallData,
-              gas: BigInt(300000), // Higher gas limit for storing larger memo data
-            } as any,
+              abi: memoStoreAbi,
+              functionName: 'putMemo',
+              args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
+            },
           ],
           capabilities: { sync: true },
         })
