@@ -70,8 +70,10 @@ export function TransferPanel() {
     headerTxHash?: `0x${string}`
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [showPreview, setShowPreview] = React.useState(false)
 
   const token = tokenList.find((item) => item.address === tokenAddress) ?? DEFAULT_TRANSFER_TOKEN
+  const effectivePurpose = purposeSelection === 'custom' ? customPurpose : purposeSelection
 
   React.useEffect(() => {
     setRecipientKeyStatus('idle')
@@ -378,7 +380,6 @@ export function TransferPanel() {
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
         const locatorUrl = useOnchain ? '' : `${baseUrl}/${memoId}`
 
-        const effectivePurpose = purposeSelection === 'custom' ? customPurpose : purposeSelection
         const headerParams: CreateMemoHeaderParams = {
           memoId,
           purpose: effectivePurpose || 'Transfer',
@@ -429,8 +430,8 @@ export function TransferPanel() {
       <div className="panel-header">
         <h3 className="panel-title">New memo transfer</h3>
         <div className="panel-header-actions">
-          <button className="btn btn-primary" disabled={!canSubmit || isSubmitting} onClick={() => void submitTransfer()}>
-            {isSubmitting ? 'Submitting…' : 'Send transfer'}
+          <button className="btn btn-primary" disabled={!canSubmit || isSubmitting} onClick={() => setShowPreview(true)}>
+            {isSubmitting ? 'Submitting…' : 'Review & Send'}
           </button>
         </div>
       </div>
@@ -487,36 +488,37 @@ export function TransferPanel() {
           </label>
         </div>
 
+        <div className="field-row">
+          <label className="field">
+            <span>Purpose</span>
+            <select
+              value={purposeSelection}
+              onChange={(event) => setPurposeSelection(event.target.value)}
+            >
+              {PURPOSE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {purposeSelection === 'custom' && (
+            <label className="field">
+              <span>Custom Purpose</span>
+              <input
+                value={customPurpose}
+                onChange={(event) => setCustomPurpose(event.target.value.slice(0, 16))}
+                placeholder="Max 16 chars"
+                maxLength={16}
+              />
+            </label>
+          )}
+        </div>
+
         {headerReady && (
           <div className="card" style={{ padding: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Public Memo Header</div>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Public Memo Header (Optional)</div>
             <div className="stack-sm">
-              <div className="field-row">
-                <label className="field">
-                  <span>Purpose</span>
-                  <select
-                    value={purposeSelection}
-                    onChange={(event) => setPurposeSelection(event.target.value)}
-                  >
-                    {PURPOSE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {purposeSelection === 'custom' && (
-                  <label className="field">
-                    <span>Custom Purpose</span>
-                    <input
-                      value={customPurpose}
-                      onChange={(event) => setCustomPurpose(event.target.value.slice(0, 16))}
-                      placeholder="Max 16 chars"
-                      maxLength={16}
-                    />
-                  </label>
-                )}
-              </div>
               <div className="field-row">
                 <label className="field">
                   <span>Sender ID</span>
@@ -536,7 +538,7 @@ export function TransferPanel() {
                 </label>
               </div>
               <div className="muted" style={{ fontSize: 12 }}>
-                These fields create a public on-chain header with identifiers visible to anyone.
+                Fill both to create a public on-chain header with identifiers visible to anyone.
               </div>
             </div>
           </div>
@@ -574,20 +576,6 @@ export function TransferPanel() {
           </div>
         </label>
 
-        <label className="field">
-          <span>Additional Info (optional)</span>
-          <textarea
-            value={additionalInfo}
-            onChange={(event) => setAdditionalInfo(event.target.value.slice(0, MAX_ADDITIONAL_INFO_BYTES))}
-            placeholder="Free-form notes, references, or instructions (max 128 characters)"
-            rows={2}
-            style={{ resize: 'vertical', minHeight: 60 }}
-          />
-          <span className="muted" style={{ fontSize: 11 }}>
-            {additionalInfo.length}/{MAX_ADDITIONAL_INFO_BYTES} characters
-          </span>
-        </label>
-
         {ivmsMode === 'upload' ? (
           <div className="stack-sm">
             <input type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
@@ -609,6 +597,20 @@ export function TransferPanel() {
         ) : (
           <IvmsForm value={ivmsForm} onChange={setIvmsForm} />
         )}
+
+        <label className="field">
+          <span>Additional Info (optional)</span>
+          <textarea
+            value={additionalInfo}
+            onChange={(event) => setAdditionalInfo(event.target.value.slice(0, MAX_ADDITIONAL_INFO_BYTES))}
+            placeholder="Free-form notes, references, or instructions (max 128 characters)"
+            rows={2}
+            style={{ resize: 'vertical', minHeight: 60 }}
+          />
+          <span className="muted" style={{ fontSize: 11 }}>
+            {additionalInfo.length}/{MAX_ADDITIONAL_INFO_BYTES} characters
+          </span>
+        </label>
 
         <div className="card memo-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -777,6 +779,101 @@ export function TransferPanel() {
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      {showPreview && (
+        <div className="modal-backdrop" onClick={() => setShowPreview(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Review Transfer</h3>
+              <button className="btn btn-ghost" onClick={() => setShowPreview(false)}>✕</button>
+            </div>
+
+            <div className="stack-md">
+              <div className="card">
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Transfer Details</div>
+                <div className="detail-grid">
+                  <div className="detail-span">
+                    <div className="muted">Recipient</div>
+                    <div className="mono detail-address">{toAddress}</div>
+                  </div>
+                  <div>
+                    <div className="muted">Token</div>
+                    <div>{token.symbol}</div>
+                  </div>
+                  <div>
+                    <div className="muted">Amount</div>
+                    <div>{amount} {token.symbol}</div>
+                  </div>
+                  <div>
+                    <div className="muted">Purpose</div>
+                    <div>{effectivePurpose}</div>
+                  </div>
+                  <div>
+                    <div className="muted">Storage</div>
+                    <div>{useOnchain ? 'Onchain (encrypted)' : 'Offchain (Vercel Blob)'}</div>
+                  </div>
+                  {additionalInfo && (
+                    <div className="detail-span">
+                      <div className="muted">Additional Info</div>
+                      <div>{additionalInfo}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="card">
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Transactions to Send</div>
+                <div className="stack-sm">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="status-pill">1</span>
+                    <span>Transfer {amount} {token.symbol} to recipient</span>
+                  </div>
+                  {useOnchain && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="status-pill">2</span>
+                      <span>Store encrypted memo onchain (MemoStore)</span>
+                    </div>
+                  )}
+                  {headerReady && senderIdentifier && recipientIdentifier && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="status-pill">{useOnchain ? '3' : '2'}</span>
+                      <span>Create public memo header (PublicMemoHeader)</span>
+                    </div>
+                  )}
+                  {!useOnchain && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="status-pill status-pill-neutral">{headerReady && senderIdentifier && recipientIdentifier ? '3' : '2'}</span>
+                      <span className="muted">Save memo data offchain (API call)</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="detail-span">
+                <div className="muted" style={{ fontSize: 12 }}>Memo ID</div>
+                <div className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>{memoId}</div>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowPreview(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setShowPreview(false)
+                  void submitTransfer()
+                }}
+              >
+                {isSubmitting ? 'Submitting…' : 'Confirm & Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
