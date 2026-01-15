@@ -82,12 +82,12 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
             <a className="app-nav-link" href="/">Send</a>
             <a className="app-nav-link" href="/vault">Memo Vault</a>
             <a className="app-nav-link" href="/register">Register</a>
-            <a className="app-nav-link" href="/docs">Docs</a>
           </nav>
           <a className="app-nav-link app-nav-link-danger" href="/regulator">Regulator mode</a>
         </div>
         {!isAuthed ? (
           <div className="topbar-actions">
+            <a className="btn btn-ghost" href="/docs">Docs</a>
             <button
               className="btn btn-secondary"
               disabled={!connector || connecting}
@@ -128,6 +128,7 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
                 </button>
               </div>
             )}
+            <a className="btn btn-ghost" href="/docs">Docs</a>
             <button className="btn btn-secondary" onClick={() => disconnect()}>
               Sign out
             </button>
