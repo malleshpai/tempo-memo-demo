@@ -331,11 +331,23 @@ export function TransferPanel() {
         memoTxHash = memoReceipt.transactionHash
       }
 
-      const hash = await Actions.token.transfer(wagmiConfig, {
-        amount: parsedAmount,
-        to: toAddress as `0x${string}`,
-        token: token.address,
-        memo: memoId,
+      // Use standard ERC20 transfer with memo in data field
+      const hash = await writeContractAsync({
+        address: token.address,
+        abi: [
+          {
+            name: 'transfer',
+            type: 'function',
+            stateMutability: 'nonpayable',
+            inputs: [
+              { name: 'to', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+            outputs: [{ type: 'bool' }],
+          },
+        ] as const,
+        functionName: 'transfer',
+        args: [toAddress as `0x${string}`, parsedAmount],
       })
       setStatus('Waiting for confirmation…')
       const receipt = await waitForTransactionReceipt(wagmiConfig, { hash })
@@ -825,16 +837,16 @@ export function TransferPanel() {
               <div className="card">
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Transactions to Send</div>
                 <div className="stack-sm">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="status-pill">1</span>
-                    <span>Transfer {amount} {token.symbol} to recipient</span>
-                  </div>
                   {useOnchain && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="status-pill">2</span>
+                      <span className="status-pill">1</span>
                       <span>Store encrypted memo onchain (MemoStore)</span>
                     </div>
                   )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="status-pill">{useOnchain ? '2' : '1'}</span>
+                    <span>Transfer {amount} {token.symbol} to recipient</span>
+                  </div>
                   {headerReady && senderIdentifier && recipientIdentifier && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="status-pill">{useOnchain ? '3' : '2'}</span>
