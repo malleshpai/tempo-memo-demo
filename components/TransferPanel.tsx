@@ -3,7 +3,7 @@
 import React from 'react'
 import { parseUnits, isAddress, stringToHex, padHex } from 'viem'
 import { tempoTestnet } from 'viem/chains'
-import { Actions } from 'wagmi/tempo'
+import { Hooks } from 'wagmi/tempo'
 import { useConnection, usePublicClient, useWriteContract } from 'wagmi'
 import { waitForTransactionReceipt } from 'wagmi/actions'
 import { TOKENS, DEFAULT_TRANSFER_TOKEN } from '../lib/constants'
@@ -34,6 +34,17 @@ const emptyForm: IvmsFormData = {
   originator: { name: '', address: '', institution: '', country: '' },
   beneficiary: { name: '', address: '', institution: '', country: '' },
   transaction: { purpose: '', reference: '' },
+}
+
+// Test data for quick testing
+const TEST_RECIPIENT = '0xc9D3eb74123249c16069A91ee3b89722ca98d99c' as const
+const TEST_AMOUNT = '1'
+const TEST_SENDER_ID = 'test@sender.com'
+const TEST_RECIPIENT_ID = 'test@recipient.com'
+const TEST_FORM: IvmsFormData = {
+  originator: { name: 'Test Sender', address: '123 Test St', institution: 'Test Bank', country: 'US' },
+  beneficiary: { name: 'Test Recipient', address: '456 Demo Ave', institution: 'Demo Bank', country: 'US' },
+  transaction: { purpose: 'Test Payment', reference: 'TEST-001' },
 }
 
 type TxRowStatus = 'pending' | 'sending' | 'sent' | 'confirmed' | 'error'
@@ -122,6 +133,7 @@ export function TransferPanel() {
   const { address } = useConnection()
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
+  const tokenTransfer = Hooks.token.useTransferSync()
   const [toAddress, setToAddress] = React.useState('')
   const [recipientKeyStatus, setRecipientKeyStatus] = React.useState<'idle' | 'checking' | 'available' | 'missing' | 'error'>('idle')
   const [recipientKeyMessage, setRecipientKeyMessage] = React.useState<string | null>(null)
@@ -174,6 +186,18 @@ export function TransferPanel() {
     setRecipientKeyMessage(null)
     setUseOnchain(false)
   }, [toAddress])
+
+  const fillTestData = () => {
+    setToAddress(TEST_RECIPIENT)
+    setAmount(TEST_AMOUNT)
+    setSenderIdentifier(TEST_SENDER_ID)
+    setRecipientIdentifier(TEST_RECIPIENT_ID)
+    setIvmsForm(TEST_FORM)
+    setPurposeSelection('Payment')
+    setIvmsMode('form')
+    // Trigger recipient key check
+    void checkRecipientKey()
+  }
 
   const resetStatus = () => {
     setStatus(null)
@@ -421,25 +445,18 @@ export function TransferPanel() {
 
       // ============ TX 1: Token Transfer ============
       setTxProgress(prev => ({ ...prev, transfer: { status: 'sending' } }))
-      const transferHash = await writeContractAsync({
-        address: token.address,
-        abi: [{
-          name: 'transfer',
-          type: 'function',
-          stateMutability: 'nonpayable',
-          inputs: [
-            { name: 'to', type: 'address' },
-            { name: 'amount', type: 'uint256' }
-          ],
-          outputs: [{ type: 'bool' }]
-        }] as const,
-        functionName: 'transfer',
-        args: [toAddress as `0x${string}`, parsedAmount],
-        chainId: tempoTestnet.id,
+
+      // Use Tempo's native token transfer hook
+      const transferResult = await tokenTransfer.mutateAsync({
+        amount: parsedAmount,
+        to: toAddress as `0x${string}`,
+        token: token.address,
       })
+
+      const transferHash = transferResult.receipt.transactionHash
       setTxProgress(prev => ({ ...prev, transfer: { status: 'sent', hash: transferHash } }))
-      const transferReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: transferHash })
-      transferTxHash = transferReceipt.transactionHash
+      // mutateAsync waits for the receipt, so we can mark it confirmed immediately
+      transferTxHash = transferHash
       setTxProgress(prev => ({ ...prev, transfer: { status: 'confirmed', hash: transferTxHash } }))
 
       // ============ TX 2: Public Memo Header ============
@@ -542,6 +559,14 @@ export function TransferPanel() {
       <div className="panel-header">
         <h3 className="panel-title">New memo transfer</h3>
         <div className="panel-header-actions">
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={fillTestData}
+            title="Fill form with test data for quick testing"
+          >
+            Fill Test Data
+          </button>
           <button className="btn btn-primary" disabled={!canSubmit || isSubmitting} onClick={() => setShowPreview(true)}>
             {isSubmitting ? 'Submitting…' : 'Review & Send'}
           </button>
