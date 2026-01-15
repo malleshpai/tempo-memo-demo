@@ -486,6 +486,7 @@ export function TransferPanel() {
           abi: publicMemoHeaderAbi,
           functionName: 'createMemoHeader',
           args: [headerParams],
+          chainId: tempoTestnet.id,
         })
         setTxProgress(prev => ({ ...prev, header: { status: 'sent', hash: headerHash } }))
         const headerReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: headerHash })
@@ -501,6 +502,7 @@ export function TransferPanel() {
           abi: memoStoreAbi,
           functionName: 'putMemo',
           args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
+          chainId: tempoTestnet.id,
         })
         setTxProgress(prev => ({ ...prev, memo: { status: 'sent', hash: memoHash } }))
         const memoReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: memoHash })
