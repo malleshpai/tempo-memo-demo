@@ -36,6 +36,88 @@ const emptyForm: IvmsFormData = {
   transaction: { purpose: '', reference: '' },
 }
 
+type TxRowStatus = 'pending' | 'sending' | 'sent' | 'confirmed' | 'error'
+
+function TransactionRow({
+  number,
+  label,
+  status,
+  hash,
+  explorerBase,
+  isSubmitting,
+}: {
+  number: number
+  label: string
+  status: TxRowStatus
+  hash?: `0x${string}`
+  explorerBase?: string
+  isSubmitting: boolean
+}) {
+  const getStatusText = () => {
+    switch (status) {
+      case 'pending':
+        return ''
+      case 'sending':
+        return 'Sending...'
+      case 'sent':
+        return 'Confirming...'
+      case 'confirmed':
+        return 'Confirmed'
+      case 'error':
+        return 'Failed'
+      default:
+        return ''
+    }
+  }
+
+  const getStatusPillClass = () => {
+    if (!isSubmitting) return 'status-pill'
+    switch (status) {
+      case 'confirmed':
+        return 'status-pill status-pill-success'
+      case 'sending':
+      case 'sent':
+        return 'status-pill status-pill-active'
+      case 'error':
+        return 'status-pill status-pill-error'
+      default:
+        return 'status-pill'
+    }
+  }
+
+  const statusText = getStatusText()
+  const explorerUrl = hash && explorerBase ? `${explorerBase}/tx/${hash}` : undefined
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span className={getStatusPillClass()}>{number}</span>
+      <span style={{ flex: 1 }}>{label}</span>
+      {isSubmitting && statusText && (
+        <span
+          className="muted"
+          style={{
+            fontSize: 12,
+            color: status === 'confirmed' ? '#16a34a' : status === 'error' ? '#dc2626' : undefined,
+          }}
+        >
+          {statusText}
+        </span>
+      )}
+      {status === 'confirmed' && explorerUrl && (
+        <a
+          href={explorerUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{ fontSize: 12 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          View
+        </a>
+      )}
+    </div>
+  )
+}
+
 export function TransferPanel() {
   const { address } = useConnection()
   const publicClient = usePublicClient()
@@ -71,6 +153,18 @@ export function TransferPanel() {
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [showPreview, setShowPreview] = React.useState(false)
+
+  // Transaction progress tracking
+  type TxStatus = 'pending' | 'sending' | 'sent' | 'confirmed' | 'error'
+  const [txProgress, setTxProgress] = React.useState<{
+    transfer: { status: TxStatus; hash?: `0x${string}` }
+    header: { status: TxStatus; hash?: `0x${string}` }
+    memo: { status: TxStatus; hash?: `0x${string}` }
+  }>({
+    transfer: { status: 'pending' },
+    header: { status: 'pending' },
+    memo: { status: 'pending' },
+  })
 
   const token = tokenList.find((item) => item.address === tokenAddress) ?? DEFAULT_TRANSFER_TOKEN
   const effectivePurpose = purposeSelection === 'custom' ? customPurpose : purposeSelection
@@ -236,9 +330,23 @@ export function TransferPanel() {
     }
     const parsedAmount = parseUnits(amount, token.decimals)
     setIsSubmitting(true)
+
+    // Reset transaction progress
+    setTxProgress({
+      transfer: { status: 'pending' },
+      header: { status: 'pending' },
+      memo: { status: 'pending' },
+    })
+
+    let transferTxHash: `0x${string}` | undefined
+    let headerTxHash: `0x${string}` | undefined
     let memoTxHash: `0x${string}` | undefined
+
+    // Prepare encrypted memo data if onchain
+    let onchainMemoData: { memo: OnchainEncryptedMemoV2; memoBytes: `0x${string}` } | undefined
+
     try {
-      setStatus('Submitting transfer…')
+      // Pre-compute onchain memo if needed
       if (useOnchain) {
         if (!recipientKeyOk) {
           throw new Error("Recipient has not registered their key for onchain memos.")
@@ -278,29 +386,17 @@ export function TransferPanel() {
           { addr: toAddress as `0x${string}`, iv: recipientWrapped.iv, encKey: recipientWrapped.encKey },
         ]
 
-        // Wrap keys for regulator if configured
         if (REGULATOR_PUBLIC_KEY_HEX && REGULATOR_ADDRESS) {
-          const regulatorWrapped = await encryptDataKeyFor(
-            memoId,
-            senderPrivate,
-            REGULATOR_PUBLIC_KEY_HEX,
-            dataKey,
-          )
-          keys.push({
-            addr: REGULATOR_ADDRESS as `0x${string}`,
-            iv: regulatorWrapped.iv,
-            encKey: regulatorWrapped.encKey,
-          })
+          const regulatorWrapped = await encryptDataKeyFor(memoId, senderPrivate, REGULATOR_PUBLIC_KEY_HEX, dataKey)
+          keys.push({ addr: REGULATOR_ADDRESS as `0x${string}`, iv: regulatorWrapped.iv, encKey: regulatorWrapped.encKey })
         }
 
-        // Encode additional info as base64 if provided
         let additionalInfoB64: string | undefined
         if (additionalInfo.trim()) {
           const infoBytes = new TextEncoder().encode(additionalInfo.trim().slice(0, MAX_ADDITIONAL_INFO_BYTES))
           additionalInfoB64 = btoa(String.fromCharCode(...infoBytes))
         }
 
-        // Build compact v2 memo format (~950 bytes vs ~1860 bytes for v1)
         const onchainMemo: OnchainEncryptedMemoV2 = {
           v: 2,
           s: address as `0x${string}`,
@@ -320,86 +416,38 @@ export function TransferPanel() {
           throw new Error(`Encrypted memo is ${size} bytes, exceeds 2048 byte limit.`)
         }
 
-        setStatus('Storing encrypted memo onchain…')
-        const memoTransactionHash = await writeContractAsync({
-          address: MEMO_STORE_ADDRESS,
-          abi: memoStoreAbi,
-          functionName: 'putMemo',
-          args: [memoId, bytesToHex(encodeJson(onchainMemo)), address as `0x${string}`, toAddress as `0x${string}`],
-        })
-        setStatus('Waiting for memo transaction confirmation…')
-        const memoReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: memoTransactionHash })
-        memoTxHash = memoReceipt.transactionHash
+        onchainMemoData = { memo: onchainMemo, memoBytes: bytesToHex(encodeJson(onchainMemo)) }
       }
 
-      // Use standard ERC20 transfer with memo in data field
-      const hash = await writeContractAsync({
+      // ============ TX 1: Token Transfer ============
+      setTxProgress(prev => ({ ...prev, transfer: { status: 'sending' } }))
+      const transferHash = await writeContractAsync({
         address: token.address,
-        abi: [
-          {
-            name: 'transfer',
-            type: 'function',
-            stateMutability: 'nonpayable',
-            inputs: [
-              { name: 'to', type: 'address' },
-              { name: 'amount', type: 'uint256' },
-            ],
-            outputs: [{ type: 'bool' }],
-          },
-        ] as const,
+        abi: [{
+          name: 'transfer',
+          type: 'function',
+          stateMutability: 'nonpayable',
+          inputs: [
+            { name: 'to', type: 'address' },
+            { name: 'amount', type: 'uint256' }
+          ],
+          outputs: [{ type: 'bool' }]
+        }] as const,
         functionName: 'transfer',
         args: [toAddress as `0x${string}`, parsedAmount],
+        chainId: tempoTestnet.id,
       })
-      setStatus('Waiting for confirmation…')
-      const receipt = await waitForTransactionReceipt(wagmiConfig, { hash })
+      setTxProgress(prev => ({ ...prev, transfer: { status: 'sent', hash: transferHash } }))
+      const transferReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: transferHash })
+      transferTxHash = transferReceipt.transactionHash
+      setTxProgress(prev => ({ ...prev, transfer: { status: 'confirmed', hash: transferTxHash } }))
 
-      const formData = new FormData()
-      formData.set('memoId', memoId)
-      formData.set('sender', address)
-      formData.set('recipient', toAddress)
-      formData.set('tokenAddress', token.address)
-      formData.set('tokenSymbol', token.symbol)
-      formData.set('tokenDecimals', String(token.decimals))
-      formData.set('amountBase', parsedAmount.toString())
-      formData.set('amountDisplay', amount)
-      formData.set('txHash', receipt.transactionHash)
-      formData.set('ivmsCanonical', ivmsCanonical)
-      formData.set('ivmsPayload', JSON.stringify(ivmsPayload))
-      if (ivmsFile) {
-        formData.set('file', ivmsFile)
-      }
-      if (invoiceFile) {
-        formData.set('invoice', invoiceFile)
-      }
-      if (additionalInfo.trim()) {
-        formData.set('additionalInfo', additionalInfo.trim())
-      }
-
-      if (!useOnchain) {
-        setStatus('Saving memo data…')
-        const response = await fetch('/api/memos', {
-          method: 'POST',
-          body: formData,
-        })
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}))
-          throw new Error(body?.error || 'Failed to save memo data.')
-        }
-      }
-
-      let headerTxHash: `0x${string}` | undefined
-      // For onchain memos: always create public header (use address as identifier if not provided)
-      // For offchain memos: only create header if both identifiers are provided
-      const shouldCreateHeader = headerReady && PUBLIC_MEMO_HEADER_ADDRESS && (
-        useOnchain || (senderIdentifier && recipientIdentifier)
-      )
-
+      // ============ TX 2: Public Memo Header ============
+      const shouldCreateHeader = headerReady && PUBLIC_MEMO_HEADER_ADDRESS && (useOnchain || (senderIdentifier && recipientIdentifier))
       if (shouldCreateHeader && PUBLIC_MEMO_HEADER_ADDRESS) {
-        setStatus('Creating public memo header…')
+        setTxProgress(prev => ({ ...prev, header: { status: 'sending' } }))
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
         const locatorUrl = useOnchain ? '' : `${baseUrl}/${memoId}`
-
-        // Use address as identifier if not provided
         const finalSenderIdentifier = senderIdentifier || address
         const finalRecipientIdentifier = recipientIdentifier || toAddress
 
@@ -416,18 +464,59 @@ export function TransferPanel() {
           version: MEMO_VERSION,
         }
 
-        const headerTx = await writeContractAsync({
+        const headerHash = await writeContractAsync({
           address: PUBLIC_MEMO_HEADER_ADDRESS,
           abi: publicMemoHeaderAbi,
           functionName: 'createMemoHeader',
           args: [headerParams],
         })
-        setStatus('Waiting for header transaction confirmation…')
-        const headerReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: headerTx })
+        setTxProgress(prev => ({ ...prev, header: { status: 'sent', hash: headerHash } }))
+        const headerReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: headerHash })
         headerTxHash = headerReceipt.transactionHash
+        setTxProgress(prev => ({ ...prev, header: { status: 'confirmed', hash: headerTxHash } }))
       }
 
-      setMemoResult({ memoId, txHash: receipt.transactionHash, memoTxHash, headerTxHash })
+      // ============ TX 3: Encrypted Memo (MemoStore) ============
+      if (useOnchain && onchainMemoData && MEMO_STORE_ADDRESS) {
+        setTxProgress(prev => ({ ...prev, memo: { status: 'sending' } }))
+        const memoHash = await writeContractAsync({
+          address: MEMO_STORE_ADDRESS,
+          abi: memoStoreAbi,
+          functionName: 'putMemo',
+          args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
+        })
+        setTxProgress(prev => ({ ...prev, memo: { status: 'sent', hash: memoHash } }))
+        const memoReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: memoHash })
+        memoTxHash = memoReceipt.transactionHash
+        setTxProgress(prev => ({ ...prev, memo: { status: 'confirmed', hash: memoTxHash } }))
+      }
+
+      // Save offchain data if not onchain
+      if (!useOnchain) {
+        const formData = new FormData()
+        formData.set('memoId', memoId)
+        formData.set('sender', address)
+        formData.set('recipient', toAddress)
+        formData.set('tokenAddress', token.address)
+        formData.set('tokenSymbol', token.symbol)
+        formData.set('tokenDecimals', String(token.decimals))
+        formData.set('amountBase', parsedAmount.toString())
+        formData.set('amountDisplay', amount)
+        formData.set('txHash', transferTxHash!)
+        formData.set('ivmsCanonical', ivmsCanonical)
+        formData.set('ivmsPayload', JSON.stringify(ivmsPayload))
+        if (ivmsFile) formData.set('file', ivmsFile)
+        if (invoiceFile) formData.set('invoice', invoiceFile)
+        if (additionalInfo.trim()) formData.set('additionalInfo', additionalInfo.trim())
+
+        const response = await fetch('/api/memos', { method: 'POST', body: formData })
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}))
+          throw new Error(body?.error || 'Failed to save memo data.')
+        }
+      }
+
+      setMemoResult({ memoId, txHash: transferTxHash, memoTxHash, headerTxHash })
       setStatus('Transfer completed.')
     } catch (err: any) {
       setError(err?.message ?? String(err))
@@ -805,11 +894,13 @@ export function TransferPanel() {
 
       {/* Preview Modal */}
       {showPreview && (
-        <div className="modal-backdrop" onClick={() => setShowPreview(false)}>
+        <div className="modal-backdrop" onClick={() => !isSubmitting && setShowPreview(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Review Transfer</h3>
-              <button className="btn btn-ghost" onClick={() => setShowPreview(false)}>✕</button>
+              <h3>{isSubmitting ? 'Submitting Transfer' : 'Review Transfer'}</h3>
+              {!isSubmitting && (
+                <button className="btn btn-ghost" onClick={() => setShowPreview(false)}>✕</button>
+              )}
             </div>
 
             <div className="stack-md">
@@ -846,41 +937,52 @@ export function TransferPanel() {
               </div>
 
               <div className="card">
-                <div style={{ fontWeight: 600, marginBottom: 8 }}>Transactions to Send</div>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                  {isSubmitting ? 'Transaction Progress' : 'Transactions to Send'}
+                </div>
                 <div className="stack-sm">
-                  {useOnchain && (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="status-pill">1</span>
-                        <span>Store encrypted memo onchain (MemoStore)</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="status-pill">2</span>
-                        <span>Transfer {amount} {token.symbol} to recipient</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="status-pill">3</span>
-                        <span>Create public memo header (PublicMemoHeader)</span>
-                      </div>
-                    </>
+                  {/* TX 1: Token Transfer */}
+                  <TransactionRow
+                    number={1}
+                    label={`Transfer ${amount} ${token.symbol} to recipient`}
+                    status={txProgress.transfer.status}
+                    hash={txProgress.transfer.hash}
+                    explorerBase={explorerBase}
+                    isSubmitting={isSubmitting}
+                  />
+
+                  {/* TX 2: Public Header (for onchain always, for offchain if identifiers provided) */}
+                  {(useOnchain || (headerReady && senderIdentifier && recipientIdentifier)) && (
+                    <TransactionRow
+                      number={2}
+                      label="Create public memo header (PublicMemoHeader)"
+                      status={txProgress.header.status}
+                      hash={txProgress.header.hash}
+                      explorerBase={explorerBase}
+                      isSubmitting={isSubmitting}
+                    />
                   )}
+
+                  {/* TX 3: Private Memo (MemoStore) - onchain only */}
+                  {useOnchain && (
+                    <TransactionRow
+                      number={3}
+                      label="Store encrypted memo onchain (MemoStore)"
+                      status={txProgress.memo.status}
+                      hash={txProgress.memo.hash}
+                      explorerBase={explorerBase}
+                      isSubmitting={isSubmitting}
+                    />
+                  )}
+
+                  {/* Offchain save indicator */}
                   {!useOnchain && (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="status-pill">1</span>
-                        <span>Transfer {amount} {token.symbol} to recipient</span>
-                      </div>
-                      {headerReady && senderIdentifier && recipientIdentifier && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className="status-pill">2</span>
-                          <span>Create public memo header (PublicMemoHeader)</span>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="status-pill status-pill-neutral">{senderIdentifier && recipientIdentifier ? '3' : '2'}</span>
-                        <span className="muted">Save memo data offchain (API call)</span>
-                      </div>
-                    </>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="status-pill status-pill-neutral">
+                        {headerReady && senderIdentifier && recipientIdentifier ? '3' : '2'}
+                      </span>
+                      <span className="muted">Save memo data offchain (API call)</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -889,22 +991,44 @@ export function TransferPanel() {
                 <div className="muted" style={{ fontSize: 12 }}>Memo ID</div>
                 <div className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>{memoId}</div>
               </div>
+
+              {error && (
+                <div className="error-text" style={{ padding: '8px 12px', background: '#fef2f2', borderRadius: 6 }}>
+                  {error}
+                </div>
+              )}
+
+              {status && !error && (
+                <div className="success-text" style={{ padding: '8px 12px', background: '#f0fdf4', borderRadius: 6 }}>
+                  {status}
+                </div>
+              )}
             </div>
 
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setShowPreview(false)}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                disabled={isSubmitting}
-                onClick={() => {
-                  setShowPreview(false)
-                  void submitTransfer()
-                }}
-              >
-                {isSubmitting ? 'Submitting…' : 'Confirm & Send'}
-              </button>
+              {!isSubmitting && !memoResult && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => setShowPreview(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => void submitTransfer()}
+                  >
+                    Confirm & Send
+                  </button>
+                </>
+              )}
+              {memoResult && (
+                <button className="btn btn-primary" onClick={() => setShowPreview(false)}>
+                  Done
+                </button>
+              )}
+              {isSubmitting && !memoResult && (
+                <div className="muted" style={{ textAlign: 'center', width: '100%' }}>
+                  Please confirm transactions in your wallet...
+                </div>
+              )}
             </div>
           </div>
         </div>

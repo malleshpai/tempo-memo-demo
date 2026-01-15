@@ -1,15 +1,15 @@
 import type { Address } from 'viem'
 
-export const PUBLIC_KEY_REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_PUBLIC_KEY_REGISTRY_ADDRESS as
+export const PUBLIC_KEY_REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_PUBLIC_KEY_REGISTRY_ADDRESS?.trim() as
   | Address
   | undefined
-export const MEMO_STORE_ADDRESS = process.env.NEXT_PUBLIC_MEMO_STORE_ADDRESS as Address | undefined
-export const PUBLIC_MEMO_HEADER_ADDRESS = process.env.NEXT_PUBLIC_PUBLIC_MEMO_HEADER_ADDRESS as
+export const MEMO_STORE_ADDRESS = process.env.NEXT_PUBLIC_MEMO_STORE_ADDRESS?.trim() as Address | undefined
+export const PUBLIC_MEMO_HEADER_ADDRESS = process.env.NEXT_PUBLIC_PUBLIC_MEMO_HEADER_ADDRESS?.trim() as
   | Address
   | undefined
-export const REGULATOR_PUBLIC_KEY_HEX = process.env.NEXT_PUBLIC_REGULATOR_PUBLIC_KEY_HEX
-export const REGULATOR_PRIVATE_KEY_JWK = process.env.NEXT_PUBLIC_REGULATOR_PRIVATE_KEY_JWK
-export const REGULATOR_ADDRESS = process.env.NEXT_PUBLIC_REGULATOR_ADDRESS as Address | undefined
+export const REGULATOR_PUBLIC_KEY_HEX = process.env.NEXT_PUBLIC_REGULATOR_PUBLIC_KEY_HEX?.trim()
+export const REGULATOR_PRIVATE_KEY_JWK = process.env.NEXT_PUBLIC_REGULATOR_PRIVATE_KEY_JWK?.trim()
+export const REGULATOR_ADDRESS = process.env.NEXT_PUBLIC_REGULATOR_ADDRESS?.trim() as Address | undefined
 
 export const KEY_TYPE_P256 = 1
 
