@@ -32,6 +32,7 @@ export type MemoRecord = {
     filename: string
     contentType: string
   }
+  additionalInfo?: string
   createdAt: string
 }
 

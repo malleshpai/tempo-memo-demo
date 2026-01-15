@@ -26,6 +26,7 @@ export async function POST(request: Request) {
   let ivmsPayload: IvmsPayload | null = null
   let file: File | null = null
   let invoice: File | null = null
+  let additionalInfo = ''
 
   if (contentType.includes('multipart/form-data')) {
     const formData = await request.formData()
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
     if (invoiceUpload instanceof File) {
       invoice = invoiceUpload
     }
+    additionalInfo = String(formData.get('additionalInfo') ?? '')
   } else {
     const body = await request.json()
     memoId = body.memoId ?? ''
@@ -61,6 +63,7 @@ export async function POST(request: Request) {
     txHash = body.txHash ?? ''
     ivmsCanonical = body.ivmsCanonical ?? ''
     ivmsPayload = body.ivmsPayload ?? null
+    additionalInfo = body.additionalInfo ?? ''
   }
 
   if (!memoId || !isValidMemoId(memoId)) {
@@ -128,6 +131,7 @@ export async function POST(request: Request) {
     ivmsCanonical: canonical,
     file: fileInfo,
     invoice: invoiceInfo,
+    additionalInfo: additionalInfo || undefined,
     createdAt,
   }
 
