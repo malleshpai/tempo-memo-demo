@@ -3,7 +3,7 @@
 import React from 'react'
 import { useConnection, usePublicClient } from 'wagmi'
 import { getConnectorClient } from 'wagmi/actions'
-import { tempoTestnet } from 'viem/chains'
+import { tempoModerato } from '../lib/wagmi'
 import { hexToString, isAddress } from 'viem'
 import { sendCallsSync } from 'viem/actions'
 import { isValidMemoId, MemoRecord } from '../lib/memo'
@@ -281,7 +281,7 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
     }
   }
 
-  const explorerBase = tempoTestnet.blockExplorers?.default.url
+  const explorerBase = tempoModerato.blockExplorers?.default.url
   const txUrl = data?.txHash ? `${explorerBase}/tx/${data.txHash}` : undefined
   const canDelete =
     source === 'onchain' &&

@@ -3,7 +3,7 @@
 import React from 'react'
 import { useConnect, useConnection, useDisconnect } from 'wagmi'
 import { Actions } from 'wagmi/tempo'
-import { tempoTestnet } from 'viem/chains'
+import { tempoModerato } from '../lib/wagmi'
 import { wagmiConfig } from '../lib/wagmi'
 
 type AppShellProps = {
@@ -26,7 +26,7 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
 
   const connector = connectors?.[0]
   const isAuthed = isMounted && !!address
-  const explorerBase = tempoTestnet.blockExplorers?.default.url
+  const explorerBase = tempoModerato.blockExplorers?.default.url
   const addressUrl = explorerBase && address ? `${explorerBase}/address/${address}` : undefined
 
   const onLogin = () => {

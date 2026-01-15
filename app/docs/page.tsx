@@ -137,12 +137,12 @@ function DocsContent() {
               <div>
                 <a
                   className="mono"
-                  href="https://explorer.testnet.tempo.xyz/address/0x02F64DEbd94560Bfb29B0c12246819AD4388156d"
+                  href="https://explore.tempo.xyz/address/0x1313219a547CB472dBc56F97E3C2cF273a0F511B"
                   target="_blank"
                   rel="noreferrer"
                   style={{ fontSize: 13 }}
                 >
-                  0x02F64DEbd94560Bfb29B0c12246819AD4388156d
+                  0x1313219a547CB472dBc56F97E3C2cF273a0F511B
                 </a>
               </div>
               <div className="muted" style={{ fontSize: 12 }}>Stores P-256 encryption public keys per address</div>
@@ -152,12 +152,12 @@ function DocsContent() {
               <div>
                 <a
                   className="mono"
-                  href="https://explorer.testnet.tempo.xyz/address/0x639223E5224Eae37e68FC390974bFB88Be7422B8"
+                  href="https://explore.tempo.xyz/address/0xBd7D26352E199a66DdC15DC54A8a2DC697D13491"
                   target="_blank"
                   rel="noreferrer"
                   style={{ fontSize: 13 }}
                 >
-                  0x639223E5224Eae37e68FC390974bFB88Be7422B8
+                  0xBd7D26352E199a66DdC15DC54A8a2DC697D13491
                 </a>
               </div>
               <div className="muted" style={{ fontSize: 12 }}>Stores encrypted memo payloads (max 2048 bytes)</div>
@@ -167,12 +167,12 @@ function DocsContent() {
               <div>
                 <a
                   className="mono"
-                  href="https://explorer.testnet.tempo.xyz/address/0x1313219a547CB472dBc56F97E3C2cF273a0F511B"
+                  href="https://explore.tempo.xyz/address/0x6E43Da2CF11Fc48671c59de7aA18B981D8a67D59"
                   target="_blank"
                   rel="noreferrer"
                   style={{ fontSize: 13 }}
                 >
-                  0x1313219a547CB472dBc56F97E3C2cF273a0F511B
+                  0x6E43Da2CF11Fc48671c59de7aA18B981D8a67D59
                 </a>
               </div>
               <div className="muted" style={{ fontSize: 12 }}>Stores public memo metadata (purpose, parties, locator)</div>
@@ -184,9 +184,9 @@ function DocsContent() {
           <div style={{ fontWeight: 600, fontSize: 16 }}>Network Details</div>
           <div className="stack-sm" style={{ marginTop: 8 }}>
             <div><span style={{ fontWeight: 600 }}>Network</span> — Tempo Moderato Testnet</div>
-            <div><span style={{ fontWeight: 600 }}>Chain ID</span> — 42429</div>
-            <div><span style={{ fontWeight: 600 }}>RPC</span> — https://rpc.testnet.tempo.xyz</div>
-            <div><span style={{ fontWeight: 600 }}>Explorer</span> — https://explorer.testnet.tempo.xyz</div>
+            <div><span style={{ fontWeight: 600 }}>Chain ID</span> — 42431</div>
+            <div><span style={{ fontWeight: 600 }}>RPC</span> — https://rpc.moderato.tempo.xyz</div>
+            <div><span style={{ fontWeight: 600 }}>Explorer</span> — <a href="https://explore.tempo.xyz" target="_blank" rel="noreferrer">https://explore.tempo.xyz</a></div>
             <div><span style={{ fontWeight: 600 }}>Fee Token</span> — PathUSD (stablecoin gas)</div>
           </div>
         </div>

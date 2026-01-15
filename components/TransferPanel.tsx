@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { parseUnits, isAddress, stringToHex, padHex } from 'viem'
-import { tempoTestnet } from 'viem/chains'
+import { tempoModerato } from '../lib/wagmi'
 import { Hooks } from 'wagmi/tempo'
 import { useConnection, usePublicClient, useWriteContract, useWalletClient } from 'wagmi'
 import { waitForTransactionReceipt } from 'wagmi/actions'
@@ -488,7 +488,7 @@ export function TransferPanel() {
           abi: publicMemoHeaderAbi,
           functionName: 'createMemoHeader',
           args: [headerParams],
-          chain: tempoTestnet,
+          chain: tempoModerato,
         })
         setTxProgress(prev => ({ ...prev, header: { status: 'sent', hash: headerHash } }))
         const headerReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: headerHash })
@@ -505,7 +505,7 @@ export function TransferPanel() {
           abi: memoStoreAbi,
           functionName: 'putMemo',
           args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
-          chain: tempoTestnet,
+          chain: tempoModerato,
         })
         setTxProgress(prev => ({ ...prev, memo: { status: 'sent', hash: memoHash } }))
         const memoReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: memoHash })
@@ -548,7 +548,7 @@ export function TransferPanel() {
     }
   }
 
-  const explorerBase = tempoTestnet.blockExplorers?.default.url
+  const explorerBase = tempoModerato.blockExplorers?.default.url
   const txUrl = memoResult?.txHash
     ? `${explorerBase}/tx/${memoResult.txHash}`
     : undefined

@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { usePayrollStore } from '../store/payrollStore'
-import { tempoTestnet } from 'viem/chains'
+import { tempoModerato } from '../lib/wagmi'
 
 export function ReportsList() {
   const reports = usePayrollStore((s) => s.reports)
@@ -35,7 +35,7 @@ export function ReportsList() {
                 {r.txHash ? (
                   <a
                     className="btn btn-ghost"
-                    href={`${tempoTestnet.blockExplorers?.default.url}/tx/${r.txHash}`}
+                    href={`${tempoModerato.blockExplorers?.default.url}/tx/${r.txHash}`}
                     target="_blank"
                     rel="noreferrer"
                   >

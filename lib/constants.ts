@@ -1,4 +1,4 @@
-export const TEMPO_CHAIN = 'tempoTestnet' as const
+export const TEMPO_CHAIN = 'tempoModerato' as const
 
 // Tempo testnet faucet assets per docs.
 export const TOKENS = {
