@@ -57,6 +57,7 @@ export type OnchainEncryptedMemoV2 = {
   t: number            // createdAt (unix seconds)
   tk: Address          // token address
   amt: string          // amount display string
+  p?: string           // purpose (e.g. "Payroll", "Invoice")
   add?: string         // additionalInfo (base64, max 128 bytes decoded)
   iv: string           // encryption IV (base64)
   ct: string           // ciphertext (base64)
@@ -91,6 +92,7 @@ export type NormalizedMemo = {
   createdAt: Date
   tokenAddress: Address
   amountDisplay: string
+  purpose?: string
   additionalInfo?: string
   encIv: string
   encCiphertext: string
@@ -106,6 +108,7 @@ export const normalizeMemo = (memo: OnchainEncryptedMemo): NormalizedMemo => {
       createdAt: new Date(memo.t * 1000),
       tokenAddress: memo.tk,
       amountDisplay: memo.amt,
+      purpose: memo.p,
       additionalInfo: memo.add,
       encIv: memo.iv,
       encCiphertext: memo.ct,

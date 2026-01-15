@@ -308,6 +308,7 @@ export function TransferPanel() {
           t: Math.floor(Date.now() / 1000),
           tk: token.address,
           amt: amount,
+          ...(effectivePurpose && { p: effectivePurpose }),
           ...(additionalInfoB64 && { add: additionalInfoB64 }),
           iv,
           ct: ciphertext,
@@ -387,10 +388,20 @@ export function TransferPanel() {
       }
 
       let headerTxHash: `0x${string}` | undefined
-      if (headerReady && PUBLIC_MEMO_HEADER_ADDRESS && senderIdentifier && recipientIdentifier) {
+      // For onchain memos: always create public header (use address as identifier if not provided)
+      // For offchain memos: only create header if both identifiers are provided
+      const shouldCreateHeader = headerReady && PUBLIC_MEMO_HEADER_ADDRESS && (
+        useOnchain || (senderIdentifier && recipientIdentifier)
+      )
+
+      if (shouldCreateHeader) {
         setStatus('Creating public memo header…')
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
         const locatorUrl = useOnchain ? '' : `${baseUrl}/${memoId}`
+
+        // Use address as identifier if not provided
+        const finalSenderIdentifier = senderIdentifier || address
+        const finalRecipientIdentifier = recipientIdentifier || toAddress
 
         const headerParams: CreateMemoHeaderParams = {
           memoId,
@@ -400,8 +411,8 @@ export function TransferPanel() {
           locatorUrl,
           contentHash: memoId,
           signature: '0x' as `0x${string}`,
-          sender: { addr: address as `0x${string}`, identifier: senderIdentifier },
-          recipient: { addr: toAddress as `0x${string}`, identifier: recipientIdentifier },
+          sender: { addr: address as `0x${string}`, identifier: finalSenderIdentifier },
+          recipient: { addr: toAddress as `0x${string}`, identifier: finalRecipientIdentifier },
           version: MEMO_VERSION,
         }
 
@@ -838,26 +849,38 @@ export function TransferPanel() {
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Transactions to Send</div>
                 <div className="stack-sm">
                   {useOnchain && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="status-pill">1</span>
-                      <span>Store encrypted memo onchain (MemoStore)</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="status-pill">{useOnchain ? '2' : '1'}</span>
-                    <span>Transfer {amount} {token.symbol} to recipient</span>
-                  </div>
-                  {headerReady && senderIdentifier && recipientIdentifier && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="status-pill">{useOnchain ? '3' : '2'}</span>
-                      <span>Create public memo header (PublicMemoHeader)</span>
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="status-pill">1</span>
+                        <span>Store encrypted memo onchain (MemoStore)</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="status-pill">2</span>
+                        <span>Transfer {amount} {token.symbol} to recipient</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="status-pill">3</span>
+                        <span>Create public memo header (PublicMemoHeader)</span>
+                      </div>
+                    </>
                   )}
                   {!useOnchain && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="status-pill status-pill-neutral">{headerReady && senderIdentifier && recipientIdentifier ? '3' : '2'}</span>
-                      <span className="muted">Save memo data offchain (API call)</span>
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="status-pill">1</span>
+                        <span>Transfer {amount} {token.symbol} to recipient</span>
+                      </div>
+                      {headerReady && senderIdentifier && recipientIdentifier && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="status-pill">2</span>
+                          <span>Create public memo header (PublicMemoHeader)</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="status-pill status-pill-neutral">{senderIdentifier && recipientIdentifier ? '3' : '2'}</span>
+                        <span className="muted">Save memo data offchain (API call)</span>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
