@@ -2,7 +2,7 @@
 
 import { createConfig, http } from 'wagmi'
 import { tempoTestnet } from 'viem/chains'
-import { KeyManager, webAuthn } from 'tempo.ts/wagmi'
+import { KeyManager, webAuthn } from 'wagmi/tempo'
 import { DEFAULT_FEE_TOKEN } from './constants'
 
 export const wagmiConfig = createConfig({

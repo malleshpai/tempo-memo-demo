@@ -4,6 +4,9 @@ export const PUBLIC_KEY_REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_PUBLIC_KEY_RE
   | Address
   | undefined
 export const MEMO_STORE_ADDRESS = process.env.NEXT_PUBLIC_MEMO_STORE_ADDRESS as Address | undefined
+export const PUBLIC_MEMO_HEADER_ADDRESS = process.env.NEXT_PUBLIC_PUBLIC_MEMO_HEADER_ADDRESS as
+  | Address
+  | undefined
 export const REGULATOR_PUBLIC_KEY_HEX = process.env.NEXT_PUBLIC_REGULATOR_PUBLIC_KEY_HEX
 export const REGULATOR_PRIVATE_KEY_JWK = process.env.NEXT_PUBLIC_REGULATOR_PRIVATE_KEY_JWK
 export const REGULATOR_ADDRESS = process.env.NEXT_PUBLIC_REGULATOR_ADDRESS as Address | undefined
@@ -91,6 +94,113 @@ export const memoStoreAbi = [
     inputs: [
       { name: 'memoHash', type: 'bytes32', indexed: true },
       { name: 'recipient', type: 'address', indexed: true },
+    ],
+    anonymous: false,
+  },
+] as const
+
+export const publicMemoHeaderAbi = [
+  {
+    type: 'function',
+    name: 'createMemoHeader',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'params',
+        type: 'tuple',
+        components: [
+          { name: 'memoId', type: 'bytes32' },
+          { name: 'purpose', type: 'string' },
+          { name: 'locatorType', type: 'uint8' },
+          { name: 'locatorHash', type: 'bytes32' },
+          { name: 'locatorUrl', type: 'string' },
+          { name: 'contentHash', type: 'bytes32' },
+          { name: 'signature', type: 'bytes' },
+          {
+            name: 'sender',
+            type: 'tuple',
+            components: [
+              { name: 'addr', type: 'address' },
+              { name: 'identifier', type: 'string' },
+            ],
+          },
+          {
+            name: 'recipient',
+            type: 'tuple',
+            components: [
+              { name: 'addr', type: 'address' },
+              { name: 'identifier', type: 'string' },
+            ],
+          },
+          { name: 'version', type: 'string' },
+        ],
+      },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'deleteMemoHeader',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'memoId', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getMemoHeader',
+    stateMutability: 'view',
+    inputs: [{ name: 'memoId', type: 'bytes32' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'purpose', type: 'string' },
+          { name: 'locatorType', type: 'uint8' },
+          { name: 'locatorHash', type: 'bytes32' },
+          { name: 'locatorUrl', type: 'string' },
+          { name: 'contentHash', type: 'bytes32' },
+          { name: 'signature', type: 'bytes' },
+          {
+            name: 'sender',
+            type: 'tuple',
+            components: [
+              { name: 'addr', type: 'address' },
+              { name: 'identifier', type: 'string' },
+            ],
+          },
+          {
+            name: 'recipient',
+            type: 'tuple',
+            components: [
+              { name: 'addr', type: 'address' },
+              { name: 'identifier', type: 'string' },
+            ],
+          },
+          { name: 'version', type: 'string' },
+          { name: 'createdAt', type: 'uint64' },
+        ],
+      },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'MemoHeaderCreated',
+    inputs: [
+      { name: 'memoId', type: 'bytes32', indexed: true },
+      { name: 'senderAddr', type: 'address', indexed: true },
+      { name: 'recipientAddr', type: 'address', indexed: true },
+      { name: 'purpose', type: 'string', indexed: false },
+      { name: 'locatorType', type: 'uint8', indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'MemoHeaderDeleted',
+    inputs: [
+      { name: 'memoId', type: 'bytes32', indexed: true },
+      { name: 'deletedBy', type: 'address', indexed: true },
     ],
     anonymous: false,
   },

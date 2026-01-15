@@ -30,6 +30,7 @@ type RegulatorSummary = {
 
 type RegulatorMemo = RegulatorSummary & {
   payload?: unknown
+  isLoading?: boolean
 }
 
 const safeIsoDate = (value?: string) => {
@@ -53,6 +54,133 @@ const resolveIvmsPayload = (payload?: unknown) => {
     }
   }
   return payload
+}
+
+// Memo list item component
+function MemoListItem({
+  memo,
+  isSelected,
+  onClick,
+}: {
+  memo: RegulatorSummary
+  isSelected: boolean
+  onClick: () => void
+}) {
+  const source = memo.source ?? 'offchain'
+  return (
+    <div
+      className={`memo-list-item ${isSelected ? 'memo-list-item-selected' : ''}`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+    >
+      <div className="memo-list-item-header">
+        <span className="memo-list-item-amount">{memo.token.symbol} {memo.amountDisplay}</span>
+        <span className={`status-pill status-pill-small ${source === 'onchain' ? '' : 'status-pill-neutral'}`}>
+          {source === 'onchain' ? 'Onchain' : 'Offchain'}
+        </span>
+      </div>
+      <div className="memo-list-item-parties">
+        <span className="mono">{memo.sender.slice(0, 10)}...{memo.sender.slice(-6)}</span>
+        <span className="muted">→</span>
+        <span className="mono">{memo.recipient.slice(0, 10)}...{memo.recipient.slice(-6)}</span>
+      </div>
+      <div className="memo-list-item-date muted">
+        {new Date(memo.createdAt).toLocaleString()}
+      </div>
+    </div>
+  )
+}
+
+// Detail panel component
+function MemoDetailPanel({
+  memo,
+  error,
+}: {
+  memo: RegulatorMemo | null
+  error: string | null
+}) {
+  if (error) {
+    return (
+      <div className="memo-detail-panel">
+        <div className="memo-detail-empty">
+          <div className="error-text">{error}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!memo) {
+    return (
+      <div className="memo-detail-panel">
+        <div className="memo-detail-empty">
+          <div className="muted">Select a memo from the list to view details</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (memo.isLoading) {
+    return (
+      <div className="memo-detail-panel">
+        <div className="memo-detail-empty">
+          <div className="muted">Decrypting memo...</div>
+        </div>
+      </div>
+    )
+  }
+
+  const source = memo.source ?? 'offchain'
+
+  return (
+    <div className="memo-detail-panel">
+      <div className="memo-detail-header">
+        <h4>Memo Details</h4>
+        <span className={`status-pill ${source === 'onchain' ? '' : 'status-pill-neutral'}`}>
+          {source === 'onchain' ? 'Onchain' : 'Offchain'}
+        </span>
+      </div>
+
+      <div className="card">
+        <div className="detail-grid">
+          <div className="detail-span">
+            <div className="muted">Memo ID</div>
+            <div className="mono detail-address">{memo.memoId}</div>
+          </div>
+          <div className="detail-span">
+            <div className="muted">Sender</div>
+            <div className="mono detail-address">{memo.sender}</div>
+          </div>
+          <div className="detail-span">
+            <div className="muted">Recipient</div>
+            <div className="mono detail-address">{memo.recipient}</div>
+          </div>
+          <div>
+            <div className="muted">Token</div>
+            <div>{memo.token.symbol}</div>
+          </div>
+          <div>
+            <div className="muted">Amount</div>
+            <div>{memo.amountDisplay}</div>
+          </div>
+          <div>
+            <div className="muted">Created</div>
+            <div>{new Date(memo.createdAt).toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div style={{ fontWeight: 600, marginBottom: 12 }}>Memo Payload</div>
+        {memo.payload && typeof resolveIvmsPayload(memo.payload) === 'object' ? (
+          <IvmsPreview data={resolveIvmsPayload(memo.payload)} />
+        ) : (
+          <pre className="memo-json">{String(resolveIvmsPayload(memo.payload) ?? 'No payload loaded')}</pre>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export function RegulatorPanel() {
@@ -313,16 +441,13 @@ export function RegulatorPanel() {
     setDateFilter('all')
   }
 
-  return (
-    <section className="panel panel-wide">
-      <div className="panel-header">
-        <h3 className="panel-title">Regulator access</h3>
-        <div className="panel-header-actions">
-          <span className="muted" style={{ fontSize: 12 }}>Encrypted memo retrieval</span>
+  // Login screen
+  if (!isUnlocked) {
+    return (
+      <section className="panel">
+        <div className="panel-header">
+          <h3 className="panel-title">Regulator Access</h3>
         </div>
-      </div>
-
-      {!isUnlocked ? (
         <div className="stack-md" style={{ marginTop: 12 }}>
           <label className="field">
             <span>Regulator password</span>
@@ -331,6 +456,7 @@ export function RegulatorPanel() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Enter regulator password"
+              onKeyDown={(e) => e.key === 'Enter' && unlock()}
             />
           </label>
           <button className="btn btn-primary" onClick={unlock}>
@@ -338,162 +464,101 @@ export function RegulatorPanel() {
           </button>
           {error && <div className="error-text">{error}</div>}
         </div>
-      ) : (
-        <div className="stack-md" style={{ marginTop: 12 }}>
-          <label className="field">
-            <span>Memo hash</span>
-            <input
-              value={memoId}
-              onChange={(event) => setMemoId(event.target.value)}
-              placeholder="0x…"
-            />
-          </label>
-          <div className="panel-header-actions" style={{ gap: 12 }}>
-            <button className="btn btn-primary" onClick={() => void loadMemo()}>
-              Retrieve memo
-            </button>
-            <button className="btn btn-secondary" onClick={() => void refreshMemos()} disabled={isRefreshing}>
-              {isRefreshing ? 'Refreshing…' : 'Refresh regulator memos'}
-            </button>
-          </div>
-          {status && <div className="muted">{status}</div>}
-          {refreshNote && <div className="muted">{refreshNote}</div>}
-          {error && <div className="error-text">{error}</div>}
+      </section>
+    )
+  }
 
-          <div className="vault-filters">
-            <label className="field field-inline">
-              <span>Sender</span>
-              <input
-                value={senderFilter}
-                onChange={(event) => setSenderFilter(event.target.value)}
-                placeholder="Address"
+  // Main two-panel layout
+  return (
+    <div className="regulator-layout">
+      {/* Left panel - memo list */}
+      <div className="regulator-left-panel">
+        <div className="regulator-list-header">
+          <h3>Memos</h3>
+          <button
+            className="btn btn-secondary btn-small"
+            onClick={() => void refreshMemos()}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="regulator-filters">
+          <div className="regulator-filter-row">
+            <select
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as 'all' | 'onchain' | 'offchain')}
+              className="filter-select"
+            >
+              <option value="all">All Sources</option>
+              <option value="onchain">Onchain</option>
+              <option value="offchain">Offchain</option>
+            </select>
+            <select
+              value={assetFilter}
+              onChange={(event) => setAssetFilter(event.target.value)}
+              className="filter-select"
+            >
+              <option value="all">All Assets</option>
+              {tokens.map((token) => (
+                <option key={token} value={token}>{token}</option>
+              ))}
+            </select>
+          </div>
+          <input
+            value={senderFilter}
+            onChange={(event) => setSenderFilter(event.target.value)}
+            placeholder="Filter by address..."
+            className="filter-input"
+          />
+        </div>
+
+        {/* Memo ID lookup */}
+        <div className="regulator-lookup">
+          <input
+            value={memoId}
+            onChange={(event) => setMemoId(event.target.value)}
+            placeholder="Look up memo by ID (0x...)"
+            className="filter-input"
+          />
+          <button
+            className="btn btn-ghost btn-small"
+            onClick={() => void loadMemo()}
+            disabled={!memoId}
+          >
+            Lookup
+          </button>
+        </div>
+
+        {refreshNote && <div className="muted regulator-note">{refreshNote}</div>}
+
+        {/* Memo list */}
+        <div className="memo-list">
+          {filteredItems.length === 0 ? (
+            <div className="memo-list-empty muted">
+              {history.length === 0
+                ? 'No memos found. Click Refresh to index.'
+                : 'No memos match your filters.'}
+            </div>
+          ) : (
+            filteredItems.map((memo) => (
+              <MemoListItem
+                key={memo.memoId}
+                memo={memo}
+                isSelected={data?.memoId === memo.memoId}
+                onClick={() => void openFromHistory(memo)}
               />
-            </label>
-            <label className="field field-inline">
-              <span>Asset</span>
-              <select value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}
-              >
-                <option value="all">All</option>
-                {tokens.map((token) => (
-                  <option key={token} value={token}>{token}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field field-inline">
-              <span>Source</span>
-              <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as 'all' | 'onchain' | 'offchain')}>
-                <option value="all">All</option>
-                <option value="onchain">Onchain</option>
-                <option value="offchain">Offchain</option>
-              </select>
-            </label>
-            <div className="field field-inline">
-              <span>Amount</span>
-              <div className="filter-range">
-                <input
-                  value={amountMin}
-                  onChange={(event) => setAmountMin(event.target.value)}
-                  placeholder="Min"
-                />
-                <span className="muted">-</span>
-                <input
-                  value={amountMax}
-                  onChange={(event) => setAmountMax(event.target.value)}
-                  placeholder="Max"
-                />
-              </div>
-            </div>
-            <label className="field field-inline">
-              <span>Date</span>
-              <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)}
-              >
-                <option value="all">All</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="90d">Last 90 days</option>
-              </select>
-            </label>
-            <button className="btn btn-ghost" onClick={clearFilters} type="button">
-              Clear
-            </button>
-          </div>
-
-          <div className="stack-md" style={{ marginTop: 12 }}>
-            <div style={{ fontWeight: 600 }}>Retrieved memos</div>
-            {filteredItems.length === 0 && (
-              <div className="muted">No memos match your filters.</div>
-            )}
-            {filteredItems.map((memo) => {
-              const source = memo.source ?? 'offchain'
-              return (
-                <div className="card memo-item" key={memo.memoId}>
-                  <div className="memo-item-main">
-                    <div>
-                      <div className="memo-item-title">{memo.token.symbol} · {memo.amountDisplay}</div>
-                      <div className="memo-item-badges">
-                        <span className={source === 'onchain' ? 'status-pill' : 'status-pill status-pill-neutral'}>
-                          {source === 'onchain' ? 'Onchain' : 'Offchain'}
-                        </span>
-                        {memo.hasInvoice && <span className="status-pill status-pill-warn">Invoice</span>}
-                      </div>
-                      <div className="muted">Sender <span className="mono">{memo.sender}</span></div>
-                      <div className="muted">Recipient <span className="mono">{memo.recipient}</span></div>
-                    </div>
-                    <button
-                      className="btn btn-secondary btn-small"
-                      type="button"
-                      onClick={() => void openFromHistory(memo)}
-                    >
-                      View memo
-                    </button>
-                  </div>
-                  <div className="memo-item-meta">
-                    <span className="mono memo-hash-short">{memo.memoId}</span>
-                    <span className="muted">{new Date(memo.createdAt).toLocaleString()}</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {data && (
-            <div className="stack-md">
-              <div className="card">
-                <div className="detail-grid">
-                  <div className="detail-span">
-                    <div className="muted">Sender</div>
-                    <div className="mono detail-address">{data.sender}</div>
-                  </div>
-                  <div className="detail-span">
-                    <div className="muted">Recipient</div>
-                    <div className="mono detail-address">{data.recipient}</div>
-                  </div>
-                  <div>
-                    <div className="muted">Token</div>
-                    <div>{data.token.symbol}</div>
-                  </div>
-                  <div>
-                    <div className="muted">Amount</div>
-                    <div>{data.amountDisplay}</div>
-                  </div>
-                  <div>
-                    <div className="muted">Created</div>
-                    <div>{new Date(data.createdAt).toLocaleString()}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="card">
-                <div style={{ fontWeight: 600 }}>Memo payload</div>
-                {data.payload && typeof resolveIvmsPayload(data.payload) === 'object' ? (
-                  <IvmsPreview data={resolveIvmsPayload(data.payload)} />
-                ) : (
-                  <pre className="memo-json">{String(resolveIvmsPayload(data.payload) ?? 'No payload loaded')}</pre>
-                )}
-              </div>
-            </div>
+            ))
           )}
         </div>
-      )}
-    </section>
+      </div>
+
+      {/* Right panel - memo detail */}
+      <div className="regulator-right-panel">
+        <MemoDetailPanel memo={data} error={error} />
+      </div>
+    </div>
   )
 }

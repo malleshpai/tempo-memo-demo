@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useConnect, useConnection, useDisconnect } from 'wagmi'
-import { Actions } from 'tempo.ts/wagmi'
+import { Actions } from 'wagmi/tempo'
 import { tempoTestnet } from 'viem/chains'
 import { wagmiConfig } from '../lib/wagmi'
 

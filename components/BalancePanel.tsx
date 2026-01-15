@@ -3,7 +3,7 @@
 import React from 'react'
 import { formatUnits, parseAbi } from 'viem'
 import { useConnection, useReadContracts } from 'wagmi'
-import { Actions } from 'tempo.ts/wagmi'
+import { Actions } from 'wagmi/tempo'
 import { wagmiConfig } from '../lib/wagmi'
 import { TOKENS } from '../lib/constants'
 

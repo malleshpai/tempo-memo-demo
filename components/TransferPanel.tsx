@@ -1,13 +1,14 @@
 'use client'
 
 import React from 'react'
-import { parseUnits, isAddress } from 'viem'
+import { parseUnits, isAddress, stringToHex, padHex } from 'viem'
 import { tempoTestnet } from 'viem/chains'
-import { Actions } from 'tempo.ts/wagmi'
+import { Actions } from 'wagmi/tempo'
 import { useConnection, usePublicClient, useWriteContract } from 'wagmi'
 import { waitForTransactionReceipt } from 'wagmi/actions'
 import { TOKENS, DEFAULT_TRANSFER_TOKEN } from '../lib/constants'
-import { KEY_TYPE_P256, MEMO_STORE_ADDRESS, PUBLIC_KEY_REGISTRY_ADDRESS, REGULATOR_PUBLIC_KEY_HEX, REGULATOR_ADDRESS, memoStoreAbi, publicKeyRegistryAbi } from '../lib/contracts'
+import { KEY_TYPE_P256, MEMO_STORE_ADDRESS, PUBLIC_KEY_REGISTRY_ADDRESS, PUBLIC_MEMO_HEADER_ADDRESS, REGULATOR_PUBLIC_KEY_HEX, REGULATOR_ADDRESS, memoStoreAbi, publicKeyRegistryAbi, publicMemoHeaderAbi } from '../lib/contracts'
+import { LocatorType, MEMO_VERSION, type CreateMemoHeaderParams } from '../lib/publicMemoHeader'
 import { encryptDataKeyFor, encryptPayload, importPrivateKey, loadPrivateKey, bytesToHex, encodeJson } from '../lib/crypto'
 import { OnchainEncryptedMemo, onchainMemoSize } from '../lib/onchainMemo'
 import { canonicalizeJson, hashMemo, IvmsPayload } from '../lib/memo'
@@ -18,6 +19,16 @@ import { IvmsPreview } from './IvmsPreview'
 type IvmsMode = 'upload' | 'form'
 
 const tokenList = Object.values(TOKENS)
+
+const PURPOSE_OPTIONS = [
+  { value: 'Payroll', label: 'Payroll' },
+  { value: 'Refund', label: 'Refund' },
+  { value: 'Invoice', label: 'Invoice' },
+  { value: 'Payment', label: 'Payment' },
+  { value: 'Transfer', label: 'Transfer' },
+  { value: 'Settlement', label: 'Settlement' },
+  { value: 'custom', label: 'Other...' },
+] as const
 
 const emptyForm: IvmsFormData = {
   originator: { name: '', address: '', institution: '', country: '' },
@@ -34,7 +45,15 @@ export function TransferPanel() {
   const [recipientKeyMessage, setRecipientKeyMessage] = React.useState<string | null>(null)
   const [tokenAddress, setTokenAddress] = React.useState(DEFAULT_TRANSFER_TOKEN.address)
   const [amount, setAmount] = React.useState('')
-  const [ivmsMode, setIvmsMode] = React.useState<IvmsMode>('upload')
+  const [senderIdentifier, setSenderIdentifier] = React.useState('')
+  const [recipientIdentifier, setRecipientIdentifier] = React.useState('')
+  const [purposeSelection, setPurposeSelection] = React.useState('Payroll')
+  const [customPurpose, setCustomPurpose] = React.useState('')
+  const [useCustomMemoId, setUseCustomMemoId] = React.useState(false)
+  const [customMemoId, setCustomMemoId] = React.useState('')
+  const [memoIdInputMode, setMemoIdInputMode] = React.useState<'hex' | 'ascii' | 'uetr'>('uetr')
+  const [uetrParts, setUetrParts] = React.useState(['', '', '', '', ''])
+  const [ivmsMode, setIvmsMode] = React.useState<IvmsMode>('form')
   const [useOnchain, setUseOnchain] = React.useState(false)
   const [ivmsForm, setIvmsForm] = React.useState<IvmsFormData>(emptyForm)
   const [ivmsFile, setIvmsFile] = React.useState<File | null>(null)
@@ -47,6 +66,7 @@ export function TransferPanel() {
     memoId: `0x${string}`
     txHash?: `0x${string}`
     memoTxHash?: `0x${string}`
+    headerTxHash?: `0x${string}`
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
@@ -154,14 +174,46 @@ export function TransferPanel() {
     () => (ivmsPayload ? canonicalizeJson(ivmsPayload) : null),
     [ivmsPayload],
   )
-  const memoId = React.useMemo(
+  const autoMemoId = React.useMemo(
     () => (ivmsCanonical ? hashMemo(ivmsCanonical) : null),
     [ivmsCanonical],
   )
+  const customMemoIdHex = React.useMemo(() => {
+    if (memoIdInputMode === 'uetr') {
+      // UETR format: 8-4-4-4-12 hex chars (36 chars with hyphens, 32 without)
+      const combined = uetrParts.join('')
+      if (combined.length !== 32) return null
+      if (!/^[0-9a-fA-F]{32}$/.test(combined)) return null
+      return `0x${combined.toLowerCase()}` as `0x${string}`
+    }
+    if (!customMemoId) return null
+    if (memoIdInputMode === 'hex') {
+      if (/^0x[0-9a-fA-F]{64}$/.test(customMemoId)) {
+        return customMemoId as `0x${string}`
+      }
+      return null
+    }
+    // ASCII mode: convert to hex and pad to 32 bytes
+    if (customMemoId.length > 32) return null
+    try {
+      const hex = stringToHex(customMemoId, { size: 32 })
+      return hex as `0x${string}`
+    } catch {
+      return null
+    }
+  }, [customMemoId, memoIdInputMode, uetrParts])
+
+  const memoId = React.useMemo(() => {
+    if (useCustomMemoId && customMemoIdHex) {
+      return customMemoIdHex
+    }
+    return autoMemoId
+  }, [useCustomMemoId, customMemoIdHex, autoMemoId])
 
   const ivmsPreviewData = ivmsPayload?.format === 'json' ? (ivmsPayload.payload as Record<string, unknown>) : null
   const hasIvmsPreview = Boolean(ivmsPreviewData)
   const onchainReady = Boolean(PUBLIC_KEY_REGISTRY_ADDRESS && MEMO_STORE_ADDRESS)
+  const headerReady = Boolean(PUBLIC_MEMO_HEADER_ADDRESS)
 
   const recipientKeyOk = recipientKeyStatus === 'available'
   const canSubmit =
@@ -317,7 +369,38 @@ export function TransferPanel() {
         }
       }
 
-      setMemoResult({ memoId, txHash: receipt.transactionHash, memoTxHash })
+      let headerTxHash: `0x${string}` | undefined
+      if (headerReady && PUBLIC_MEMO_HEADER_ADDRESS && senderIdentifier && recipientIdentifier) {
+        setStatus('Creating public memo header…')
+        const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+        const locatorUrl = useOnchain ? '' : `${baseUrl}/${memoId}`
+
+        const effectivePurpose = purposeSelection === 'custom' ? customPurpose : purposeSelection
+        const headerParams: CreateMemoHeaderParams = {
+          memoId,
+          purpose: effectivePurpose || 'Transfer',
+          locatorType: useOnchain ? LocatorType.OnChain : LocatorType.OffChain,
+          locatorHash: useOnchain ? memoId : ('0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`),
+          locatorUrl,
+          contentHash: memoId,
+          signature: '0x' as `0x${string}`,
+          sender: { addr: address as `0x${string}`, identifier: senderIdentifier },
+          recipient: { addr: toAddress as `0x${string}`, identifier: recipientIdentifier },
+          version: MEMO_VERSION,
+        }
+
+        const headerTx = await writeContractAsync({
+          address: PUBLIC_MEMO_HEADER_ADDRESS,
+          abi: publicMemoHeaderAbi,
+          functionName: 'createMemoHeader',
+          args: [headerParams],
+        })
+        setStatus('Waiting for header transaction confirmation…')
+        const headerReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: headerTx })
+        headerTxHash = headerReceipt.transactionHash
+      }
+
+      setMemoResult({ memoId, txHash: receipt.transactionHash, memoTxHash, headerTxHash })
       setStatus('Transfer completed.')
     } catch (err: any) {
       setError(err?.message ?? String(err))
@@ -333,6 +416,9 @@ export function TransferPanel() {
     : undefined
   const memoTxUrl = memoResult?.memoTxHash
     ? `${explorerBase}/tx/${memoResult.memoTxHash}`
+    : undefined
+  const headerTxUrl = memoResult?.headerTxHash
+    ? `${explorerBase}/tx/${memoResult.headerTxHash}`
     : undefined
 
   return (
@@ -398,6 +484,61 @@ export function TransferPanel() {
           </label>
         </div>
 
+        {headerReady && (
+          <div className="card" style={{ padding: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Public Memo Header</div>
+            <div className="stack-sm">
+              <div className="field-row">
+                <label className="field">
+                  <span>Purpose</span>
+                  <select
+                    value={purposeSelection}
+                    onChange={(event) => setPurposeSelection(event.target.value)}
+                  >
+                    {PURPOSE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {purposeSelection === 'custom' && (
+                  <label className="field">
+                    <span>Custom Purpose</span>
+                    <input
+                      value={customPurpose}
+                      onChange={(event) => setCustomPurpose(event.target.value.slice(0, 16))}
+                      placeholder="Max 16 chars"
+                      maxLength={16}
+                    />
+                  </label>
+                )}
+              </div>
+              <div className="field-row">
+                <label className="field">
+                  <span>Sender ID</span>
+                  <input
+                    value={senderIdentifier}
+                    onChange={(event) => setSenderIdentifier(event.target.value)}
+                    placeholder="e.g. tom@ubs.com"
+                  />
+                </label>
+                <label className="field">
+                  <span>Recipient ID</span>
+                  <input
+                    value={recipientIdentifier}
+                    onChange={(event) => setRecipientIdentifier(event.target.value)}
+                    placeholder="e.g. liam@liam.com"
+                  />
+                </label>
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                These fields create a public on-chain header with identifiers visible to anyone.
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="ivms-toggle">
           <button
             className={`tab ${ivmsMode === 'upload' ? 'tab-active' : ''}`}
@@ -453,15 +594,140 @@ export function TransferPanel() {
         )}
 
         <div className="card memo-card">
-          <div className="memo-row">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>Onchain memo</div>
-              <div className="muted">Hash of the IVMS payload</div>
+              <div style={{ fontWeight: 600 }}>Memo ID</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {useCustomMemoId ? 'Custom ID (e.g. UETR)' : 'Hash of IVMS payload'}
+              </div>
             </div>
-            <div className="mono memo-hash">
+            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+              <input
+                type="checkbox"
+                checked={useCustomMemoId}
+                onChange={(e) => {
+                  setUseCustomMemoId(e.target.checked)
+                  if (!e.target.checked) {
+                    setCustomMemoId('')
+                    setMemoIdInputMode('hex')
+                  }
+                }}
+              />
+              Custom ID
+            </label>
+          </div>
+          {useCustomMemoId ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    type="radio"
+                    name="memoIdMode"
+                    checked={memoIdInputMode === 'uetr'}
+                    onChange={() => {
+                      setMemoIdInputMode('uetr')
+                      setCustomMemoId('')
+                      setUetrParts(['', '', '', '', ''])
+                    }}
+                  />
+                  UETR
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    type="radio"
+                    name="memoIdMode"
+                    checked={memoIdInputMode === 'ascii'}
+                    onChange={() => {
+                      setMemoIdInputMode('ascii')
+                      setCustomMemoId('')
+                    }}
+                  />
+                  ASCII
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    type="radio"
+                    name="memoIdMode"
+                    checked={memoIdInputMode === 'hex'}
+                    onChange={() => {
+                      setMemoIdInputMode('hex')
+                      setCustomMemoId('')
+                    }}
+                  />
+                  Hex
+                </label>
+              </div>
+              {memoIdInputMode === 'uetr' ? (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {[8, 4, 4, 4, 12].map((len, idx) => (
+                      <React.Fragment key={idx}>
+                        {idx > 0 && <span className="muted">-</span>}
+                        <input
+                          className="mono"
+                          style={{
+                            width: `${len * 10 + 16}px`,
+                            fontSize: 13,
+                            textAlign: 'center',
+                            textTransform: 'lowercase',
+                          }}
+                          value={uetrParts[idx]}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, len)
+                            const newParts = [...uetrParts]
+                            newParts[idx] = val
+                            setUetrParts(newParts)
+                            // Auto-advance to next field
+                            if (val.length === len && idx < 4) {
+                              const nextInput = e.target.parentElement?.querySelectorAll('input')[idx + 1]
+                              if (nextInput) (nextInput as HTMLInputElement).focus()
+                            }
+                          }}
+                          placeholder={'0'.repeat(len)}
+                          maxLength={len}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                    SWIFT UETR format: 8-4-4-4-12 hex characters
+                  </div>
+                </div>
+              ) : (
+                <input
+                  className="mono"
+                  style={{ width: '100%', fontSize: 13 }}
+                  value={customMemoId}
+                  onChange={(e) => setCustomMemoId(e.target.value)}
+                  placeholder={memoIdInputMode === 'hex' ? '0x... (64 hex chars)' : 'Up to 32 characters'}
+                  maxLength={memoIdInputMode === 'ascii' ? 32 : 66}
+                />
+              )}
+              {customMemoIdHex && (
+                <div className="mono" style={{ fontSize: 11, marginTop: 6, wordBreak: 'break-all', opacity: 0.7 }}>
+                  {customMemoIdHex}
+                </div>
+              )}
+              {autoMemoId && (
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  Content hash: {autoMemoId.slice(0, 10)}...{autoMemoId.slice(-8)}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              className="mono"
+              style={{
+                marginTop: 8,
+                fontSize: 13,
+                wordBreak: 'break-all',
+                lineHeight: 1.4,
+                padding: '8px 0',
+              }}
+            >
               {memoId ?? '—'}
             </div>
-          </div>
+          )}
         </div>
 
         {status && <div className="muted">{status}</div>}
@@ -480,6 +746,11 @@ export function TransferPanel() {
               {memoTxUrl && (
                 <a href={memoTxUrl} target="_blank" rel="noreferrer">
                   View memo posting transaction
+                </a>
+              )}
+              {headerTxUrl && (
+                <a href={headerTxUrl} target="_blank" rel="noreferrer">
+                  View public header transaction
                 </a>
               )}
               <a href={`/${memoResult.memoId}`}>

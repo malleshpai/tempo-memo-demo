@@ -8,10 +8,11 @@ import { hexToString, isAddress } from 'viem'
 import { sendCallsSync } from 'viem/actions'
 import { isValidMemoId, MemoRecord } from '../lib/memo'
 import { decryptDataKey, decryptPayload, importPrivateKey, loadPrivateKey } from '../lib/crypto'
-import { MEMO_STORE_ADDRESS, memoStoreAbi } from '../lib/contracts'
+import { MEMO_STORE_ADDRESS, PUBLIC_MEMO_HEADER_ADDRESS, memoStoreAbi, publicMemoHeaderAbi } from '../lib/contracts'
 import { wagmiConfig } from '../lib/wagmi'
 import { IvmsPreview } from './IvmsPreview'
 import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
+import { LocatorType, type PublicMemoHeader, isHeaderExists } from '../lib/publicMemoHeader'
 
 type MemoViewerProps = {
   memoId: string
@@ -31,9 +32,38 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
   const [actionStatus, setActionStatus] = React.useState<string | null>(null)
   const [data, setData] = React.useState<MemoResponse | null>(null)
   const [source, setSource] = React.useState<'offchain' | 'onchain' | null>(null)
+  const [publicHeader, setPublicHeader] = React.useState<PublicMemoHeader | null>(null)
+  const [headerLoading, setHeaderLoading] = React.useState(false)
   const memoStoreAddress = MEMO_STORE_ADDRESS
   const hasMemoStore = Boolean(memoStoreAddress && isAddress(memoStoreAddress))
+  const hasHeaderContract = Boolean(PUBLIC_MEMO_HEADER_ADDRESS && isAddress(PUBLIC_MEMO_HEADER_ADDRESS))
 
+  const loadPublicHeader = React.useCallback(async () => {
+    if (!hasHeaderContract || !PUBLIC_MEMO_HEADER_ADDRESS || !publicClient) return
+    if (!isValidMemoId(memoId)) return
+
+    setHeaderLoading(true)
+    try {
+      const result = await publicClient.readContract({
+        address: PUBLIC_MEMO_HEADER_ADDRESS,
+        abi: publicMemoHeaderAbi,
+        functionName: 'getMemoHeader',
+        args: [memoId as `0x${string}`],
+      }) as PublicMemoHeader
+
+      if (isHeaderExists(result)) {
+        setPublicHeader(result)
+      }
+    } catch (err) {
+      console.error('Failed to load public header:', err)
+    } finally {
+      setHeaderLoading(false)
+    }
+  }, [hasHeaderContract, publicClient, memoId])
+
+  React.useEffect(() => {
+    void loadPublicHeader()
+  }, [loadPublicHeader])
 
   const loadOnchainMemo = async () => {
     if (!hasMemoStore || !memoStoreAddress) {
@@ -255,6 +285,60 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
               <div className="mono memo-hash">{memoId}</div>
             </div>
           </div>
+
+          {headerLoading && <div className="muted">Loading public header...</div>}
+
+          {publicHeader && (
+            <div className="card">
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>Public Memo Header</div>
+              <div className="detail-grid">
+                <div>
+                  <div className="muted">Purpose</div>
+                  <div>{publicHeader.purpose || '—'}</div>
+                </div>
+                <div>
+                  <div className="muted">Version</div>
+                  <div style={{ fontSize: 12 }}>{publicHeader.version}</div>
+                </div>
+                <div className="detail-span">
+                  <div className="muted">Sender</div>
+                  <div>
+                    <div>{publicHeader.sender.identifier}</div>
+                    <div className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{publicHeader.sender.addr}</div>
+                  </div>
+                </div>
+                <div className="detail-span">
+                  <div className="muted">Recipient</div>
+                  <div>
+                    <div>{publicHeader.recipient.identifier}</div>
+                    <div className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{publicHeader.recipient.addr}</div>
+                  </div>
+                </div>
+                <div className="detail-span">
+                  <div className="muted">Locator</div>
+                  <div>
+                    {publicHeader.locatorType === LocatorType.OnChain ? (
+                      <span className="mono" style={{ fontSize: 12 }}>On-chain: {publicHeader.locatorHash.slice(0, 18)}...</span>
+                    ) : (
+                      <a href={publicHeader.locatorUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                        {publicHeader.locatorUrl}
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div className="detail-span">
+                  <div className="muted">Content Hash</div>
+                  <div className="mono" style={{ fontSize: 12 }}>{publicHeader.contentHash}</div>
+                </div>
+                {publicHeader.signature && publicHeader.signature !== '0x' && (
+                  <div className="detail-span">
+                    <div className="muted">Signature</div>
+                    <div className="mono" style={{ fontSize: 12 }}>{publicHeader.signature.slice(0, 42)}...</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {!address && <div className="muted">Log in to verify access.</div>}
           {error && <div className="error-text">{error}</div>}

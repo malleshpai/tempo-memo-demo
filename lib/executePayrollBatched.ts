@@ -56,14 +56,16 @@ export async function executePayrollBatched(params: {
       }),
     }))
 
-    // 1) Ask wallet to sign & broadcast this batch of calls :contentReference[oaicite:11]{index=11}
-    const { id } = await sendCalls(wagmiConfig, {
+    // 1) Ask wallet to sign & broadcast this batch of calls
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { id } = await sendCalls(wagmiConfig as any, {
       account: payer ?? null,
       calls,
     })
 
-    // 2) Wait for inclusion + fetch receipts :contentReference[oaicite:12]{index=12}
-    const result = await waitForCallsStatus(wagmiConfig, { id, pollingInterval: 1_000 })
+    // 2) Wait for inclusion + fetch receipts
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await waitForCallsStatus(wagmiConfig as any, { id, pollingInterval: 1_000 })
 
     // receipts are per-call-bundle; take tx hash from first receipt
     const txHash = (result.receipts?.[0]?.transactionHash ?? null) as (`0x${string}` | null)
