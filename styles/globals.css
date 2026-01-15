@@ -362,6 +362,17 @@ button {
   color: var(--muted);
 }
 
+.btn-danger-outline {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.btn-danger-outline:hover:not(:disabled) {
+  border-color: #f87171;
+  background: #fef2f2;
+  box-shadow: 0 6px 14px rgba(185, 28, 28, 0.18);
+}
+
 .card {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -985,4 +996,19 @@ input[type="file"] {
   .regulator-left-panel {
     max-height: 400px;
   }
+}
+
+/* Regulator login panel */
+.regulator-login {
+  max-width: 400px;
+  margin: 40px auto;
+}
+
+.regulator-login .field input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.regulator-login .btn {
+  width: 100%;
 }

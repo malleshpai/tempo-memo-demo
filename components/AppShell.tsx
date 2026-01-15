@@ -79,19 +79,20 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
         </div>
         <div className="app-nav-wrap">
           <nav className="app-nav">
-            <a className="app-nav-link" href="/">Send</a>
-            <a className="app-nav-link" href="/vault">Memo Vault</a>
-            <a className="app-nav-link" href="/register">Register</a>
+            <a className="app-nav-link" href="/" title="Send TIP-20 transfers with IVMS memo data">Send</a>
+            <a className="app-nav-link" href="/vault" title="View sent and received memos">Memo Vault</a>
+            <a className="app-nav-link" href="/register" title="Generate and register your encryption key">Register</a>
           </nav>
-          <a className="app-nav-link app-nav-link-danger" href="/regulator">Regulator mode</a>
         </div>
         {!isAuthed ? (
           <div className="topbar-actions">
-            <a className="btn btn-ghost" href="/docs">Docs</a>
+            <a className="btn btn-secondary" href="/docs" title="Learn how Tempo Memo works">Docs</a>
+            <a className="btn btn-secondary btn-danger-outline" href="/regulator" title="Supervisory access to all memos">Regulator</a>
             <button
               className="btn btn-secondary"
               disabled={!connector || connecting}
               onClick={onLogin}
+              title="Sign in with your passkey"
             >
               Log in
             </button>
@@ -99,6 +100,7 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
               className="btn btn-primary"
               disabled={!connector || connecting}
               onClick={onSignUp}
+              title="Create a new Tempo account with passkey"
             >
               Sign up
             </button>
@@ -107,7 +109,7 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
           <div className="topbar-actions">
             {addressUrl && (
               <div className="topbar-address-wrap">
-                <a className="topbar-address" href={addressUrl} target="_blank" rel="noreferrer">
+                <a className="topbar-address" href={addressUrl} target="_blank" rel="noreferrer" title="View address in explorer">
                   {address}
                 </a>
                 <button
@@ -115,7 +117,7 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
                   onClick={() => void copyAddress()}
                   type="button"
                   aria-label="Copy address"
-                  title="Copy address"
+                  title="Copy address to clipboard"
                 >
                   {copied ? (
                     'Copied'
@@ -128,8 +130,9 @@ export function AppShell({ title, subtitle, unauthenticated, children }: AppShel
                 </button>
               </div>
             )}
-            <a className="btn btn-ghost" href="/docs">Docs</a>
-            <button className="btn btn-secondary" onClick={() => disconnect()}>
+            <a className="btn btn-secondary" href="/docs" title="Learn how Tempo Memo works">Docs</a>
+            <a className="btn btn-secondary btn-danger-outline" href="/regulator" title="Supervisory access to all memos">Regulator</a>
+            <button className="btn btn-secondary" onClick={() => disconnect()} title="Sign out of your account">
               Sign out
             </button>
           </div>

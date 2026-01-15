@@ -1,6 +1,7 @@
 import { list, put } from '@vercel/blob'
 import { createPublicClient, http, hexToString, parseAbiItem, isAddress } from 'viem'
 import type { OnchainEncryptedMemo } from './onchainMemo'
+import { normalizeMemo, isV2Memo } from './onchainMemo'
 
 const RPC_URL = 'https://rpc.testnet.tempo.xyz'
 const INDEX_STATE_KEY = 'memos/onchain-indexer/state.json'
@@ -98,21 +99,26 @@ const buildSummary = (
   recipient: string,
   memo: OnchainEncryptedMemo,
   txHash?: `0x${string}`,
-) => ({
-  memoId: memoHash,
-  sender,
-  recipient,
-  token: memo.token ?? {
-    address: '0x0000000000000000000000000000000000000000',
-    symbol: 'Unknown',
-    decimals: 0,
-  },
-  amountDisplay: memo.amountDisplay ?? '—',
-  amountBase: memo.amountDisplay ?? '—',
-  txHash: txHash ?? undefined,
-  createdAt: memo.createdAt ?? new Date().toISOString(),
-  source: 'onchain',
-})
+) => {
+  const normalized = normalizeMemo(memo)
+  return {
+    memoId: memoHash,
+    sender,
+    recipient,
+    token: isV2Memo(memo)
+      ? { address: memo.tk, symbol: 'TIP-20', decimals: 6 }
+      : memo.token ?? {
+          address: '0x0000000000000000000000000000000000000000',
+          symbol: 'Unknown',
+          decimals: 0,
+        },
+    amountDisplay: normalized.amountDisplay ?? '—',
+    amountBase: normalized.amountDisplay ?? '—',
+    txHash: txHash ?? undefined,
+    createdAt: normalized.createdAt.toISOString(),
+    source: 'onchain',
+  }
+}
 
 const writeSummary = async (token: string, address: string, memoId: string, payload: Record<string, unknown>, prefix: string) => {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })

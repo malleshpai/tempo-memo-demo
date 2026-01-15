@@ -12,6 +12,8 @@ import { MEMO_STORE_ADDRESS, PUBLIC_MEMO_HEADER_ADDRESS, memoStoreAbi, publicMem
 import { wagmiConfig } from '../lib/wagmi'
 import { IvmsPreview } from './IvmsPreview'
 import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
+import { isV2Memo, normalizeMemo } from '../lib/onchainMemo'
+import { PUBLIC_KEY_REGISTRY_ADDRESS, publicKeyRegistryAbi, KEY_TYPE_P256 } from '../lib/contracts'
 import { LocatorType, type PublicMemoHeader, isHeaderExists } from '../lib/publicMemoHeader'
 
 type MemoViewerProps = {
@@ -95,14 +97,63 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
 
     const json = hexToString(dataHex as `0x${string}`)
     const memo = JSON.parse(json) as OnchainEncryptedMemo
-    const keyEntry = memo.keys.find((entry) => entry.addr.toLowerCase() === address.toLowerCase())
+    const normalized = normalizeMemo(memo)
+
+    // Find the user's key entry
+    let keyEntry: { iv: string; encKey: string } | undefined
+    if (isV2Memo(memo)) {
+      // v2: keys are in fixed order [sender, recipient, regulator]
+      // Figure out which index the user is
+      if (memo.s.toLowerCase() === address.toLowerCase() && memo.k.length >= 1) {
+        const [iv, encKey] = memo.k[0]
+        keyEntry = { iv, encKey }
+      } else if (memo.r.toLowerCase() === address.toLowerCase() && memo.k.length >= 2) {
+        const [iv, encKey] = memo.k[1]
+        keyEntry = { iv, encKey }
+      }
+    } else {
+      // v1: keys have addr field
+      const entry = memo.keys.find((k) => k.addr.toLowerCase() === address.toLowerCase())
+      if (entry) {
+        keyEntry = { iv: entry.iv, encKey: entry.encKey }
+      }
+    }
+
     if (!keyEntry) {
       throw new Error('This address does not have access to the encrypted memo.')
     }
 
-    const memoHash = memo.memoHash || (memoId as `0x${string}`)
-    const dataKey = await decryptDataKey(memoHash, privateKey, memo.senderPubKey, keyEntry.encKey, keyEntry.iv)
-    const payloadBytes = await decryptPayload(dataKey, memo.enc.iv, memo.enc.ciphertext)
+    // Get sender's public key for ECDH
+    let senderPubKey: string
+    if (isV2Memo(memo)) {
+      // v2: fetch sender's public key from registry
+      if (!PUBLIC_KEY_REGISTRY_ADDRESS) {
+        throw new Error('Public key registry not configured.')
+      }
+      const keyResult = await publicClient.readContract({
+        address: PUBLIC_KEY_REGISTRY_ADDRESS,
+        abi: publicKeyRegistryAbi,
+        functionName: 'getKey',
+        args: [memo.s],
+      })
+      const pubKey = keyResult?.[0] as string | undefined
+      const keyType = keyResult?.[1] as number | undefined
+      if (!pubKey || pubKey.length < 10 || keyType !== KEY_TYPE_P256) {
+        throw new Error('Sender public key not found in registry.')
+      }
+      senderPubKey = pubKey
+    } else {
+      senderPubKey = memo.senderPubKey
+    }
+
+    const dataKey = await decryptDataKey(
+      memoId as `0x${string}`,
+      privateKey,
+      senderPubKey,
+      keyEntry.encKey,
+      keyEntry.iv,
+    )
+    const payloadBytes = await decryptPayload(dataKey, normalized.encIv, normalized.encCiphertext)
     const payloadText = new TextDecoder().decode(payloadBytes)
     let decryptedPayload: unknown = payloadText
     try {
@@ -129,19 +180,21 @@ export function MemoViewer({ memoId }: MemoViewerProps) {
 
     const createdAtIso = typeof createdAt === 'bigint' && createdAt > BigInt(0)
       ? new Date(Number(createdAt) * 1000).toISOString()
-      : memo.createdAt
+      : normalized.createdAt.toISOString()
     const safeCreatedAt = createdAtIso && !Number.isNaN(Date.parse(createdAtIso))
       ? createdAtIso
       : new Date().toISOString()
-    const token = memo.token ?? { address: '0x0000000000000000000000000000000000000000', symbol: 'Unknown', decimals: 0 }
+    const token = isV2Memo(memo)
+      ? { address: memo.tk, symbol: 'TIP-20', decimals: 6 }
+      : memo.token ?? { address: '0x0000000000000000000000000000000000000000', symbol: 'Unknown', decimals: 0 }
 
     const result: MemoResponse = {
-      memoId: memoHash,
+      memoId: memoId as `0x${string}`,
       sender: sender as `0x${string}`,
       recipient: recipient as `0x${string}`,
       token,
-      amountBase: memo.amountDisplay,
-      amountDisplay: memo.amountDisplay,
+      amountBase: normalized.amountDisplay,
+      amountDisplay: normalized.amountDisplay,
       txHash: undefined,
       ivms,
       file: undefined,

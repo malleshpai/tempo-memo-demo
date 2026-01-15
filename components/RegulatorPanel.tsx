@@ -7,6 +7,8 @@ import { decryptDataKey, decryptPayload, importPrivateKey } from '../lib/crypto'
 import { isValidMemoId } from '../lib/memo'
 import { MEMO_STORE_ADDRESS, REGULATOR_ADDRESS, REGULATOR_PRIVATE_KEY_JWK, memoStoreAbi } from '../lib/contracts'
 import type { OnchainEncryptedMemo } from '../lib/onchainMemo'
+import { isV2Memo, normalizeMemo } from '../lib/onchainMemo'
+import { PUBLIC_KEY_REGISTRY_ADDRESS, publicKeyRegistryAbi, KEY_TYPE_P256 } from '../lib/contracts'
 import type { MemoRecord } from '../lib/memo'
 import { IvmsPreview } from './IvmsPreview'
 
@@ -322,14 +324,60 @@ export function RegulatorPanel() {
 
       const json = hexToString(dataHex as `0x${string}`)
       const memo = JSON.parse(json) as OnchainEncryptedMemo
-      const keyEntry = memo.keys.find((entry) => entry.addr.toLowerCase() === regulatorAddress.toLowerCase())
+      const normalized = normalizeMemo(memo)
+
+      // Find the regulator's key entry
+      let keyEntry: { iv: string; encKey: string } | undefined
+      if (isV2Memo(memo)) {
+        // v2: keys are in fixed order [sender, recipient, regulator]
+        if (memo.k.length >= 3) {
+          const [iv, encKey] = memo.k[2]
+          keyEntry = { iv, encKey }
+        }
+      } else {
+        // v1: keys have addr field
+        const entry = memo.keys.find((k) => k.addr.toLowerCase() === regulatorAddress.toLowerCase())
+        if (entry) {
+          keyEntry = { iv: entry.iv, encKey: entry.encKey }
+        }
+      }
+
       if (!keyEntry) {
         throw new Error('Regulator key not found in memo payload.')
       }
 
+      // Get sender's public key for ECDH
+      let senderPubKey: string
+      if (isV2Memo(memo)) {
+        // v2: fetch sender's public key from registry
+        if (!PUBLIC_KEY_REGISTRY_ADDRESS) {
+          throw new Error('Public key registry not configured.')
+        }
+        const keyResult = await publicClient.readContract({
+          address: PUBLIC_KEY_REGISTRY_ADDRESS,
+          abi: publicKeyRegistryAbi,
+          functionName: 'getKey',
+          args: [memo.s],
+        })
+        const pubKey = keyResult?.[0] as string | undefined
+        const keyType = keyResult?.[1] as number | undefined
+        if (!pubKey || pubKey.length < 10 || keyType !== KEY_TYPE_P256) {
+          throw new Error('Sender public key not found in registry.')
+        }
+        senderPubKey = pubKey
+      } else {
+        senderPubKey = memo.senderPubKey
+      }
+
       const privateKey = await importPrivateKey(regulatorKey)
-      const dataKey = await decryptDataKey(memo.memoHash, privateKey, memo.senderPubKey, keyEntry.encKey, keyEntry.iv)
-      const payloadBytes = await decryptPayload(dataKey, memo.enc.iv, memo.enc.ciphertext)
+      const dataKey = await decryptDataKey(
+        activeMemoId as `0x${string}`,
+        privateKey,
+        senderPubKey,
+        keyEntry.encKey,
+        keyEntry.iv,
+      )
+      const payloadBytes = await decryptPayload(dataKey, normalized.encIv, normalized.encCiphertext)
       const payloadText = new TextDecoder().decode(payloadBytes)
       let payload: unknown = payloadText
       try {
@@ -340,15 +388,17 @@ export function RegulatorPanel() {
 
       const createdAtIso = typeof createdAt === 'bigint' && createdAt > BigInt(0)
         ? new Date(Number(createdAt) * 1000).toISOString()
-        : memo.createdAt
+        : normalized.createdAt.toISOString()
       const safeCreatedAt = safeIsoDate(createdAtIso)
 
       const nextMemo: RegulatorMemo = {
-        memoId: memo.memoHash,
+        memoId: activeMemoId as `0x${string}`,
         sender: sender as `0x${string}`,
         recipient: recipient as `0x${string}`,
-        token: memo.token ?? { address: '0x0000000000000000000000000000000000000000', symbol: 'Unknown', decimals: 0 },
-        amountDisplay: memo.amountDisplay ?? '—',
+        token: isV2Memo(memo)
+          ? { address: memo.tk, symbol: 'TIP-20', decimals: 6 }
+          : memo.token ?? { address: '0x0000000000000000000000000000000000000000', symbol: 'Unknown', decimals: 0 },
+        amountDisplay: normalized.amountDisplay ?? '—',
         createdAt: safeCreatedAt,
         source: 'onchain',
         payload,
@@ -444,13 +494,16 @@ export function RegulatorPanel() {
   // Login screen
   if (!isUnlocked) {
     return (
-      <section className="panel">
+      <section className="panel regulator-login">
         <div className="panel-header">
           <h3 className="panel-title">Regulator Access</h3>
         </div>
         <div className="stack-md" style={{ marginTop: 12 }}>
+          <div className="muted" style={{ fontSize: 13 }}>
+            Enter the regulator password to access supervisory memo viewing.
+          </div>
           <label className="field">
-            <span>Regulator password</span>
+            <span>Password</span>
             <input
               type="password"
               value={password}
@@ -463,6 +516,9 @@ export function RegulatorPanel() {
             Unlock regulator access
           </button>
           {error && <div className="error-text">{error}</div>}
+          <div className="muted" style={{ fontSize: 12, textAlign: 'center' }}>
+            Demo password: <code>Iamtheregulator</code>
+          </div>
         </div>
       </section>
     )

@@ -10,7 +10,7 @@ import { TOKENS, DEFAULT_TRANSFER_TOKEN } from '../lib/constants'
 import { KEY_TYPE_P256, MEMO_STORE_ADDRESS, PUBLIC_KEY_REGISTRY_ADDRESS, PUBLIC_MEMO_HEADER_ADDRESS, REGULATOR_PUBLIC_KEY_HEX, REGULATOR_ADDRESS, memoStoreAbi, publicKeyRegistryAbi, publicMemoHeaderAbi } from '../lib/contracts'
 import { LocatorType, MEMO_VERSION, type CreateMemoHeaderParams } from '../lib/publicMemoHeader'
 import { encryptDataKeyFor, encryptPayload, importPrivateKey, loadPrivateKey, bytesToHex, encodeJson } from '../lib/crypto'
-import { OnchainEncryptedMemo, onchainMemoSize } from '../lib/onchainMemo'
+import { OnchainEncryptedMemoV2, onchainMemoSize, MAX_ADDITIONAL_INFO_BYTES } from '../lib/onchainMemo'
 import { canonicalizeJson, hashMemo, IvmsPayload } from '../lib/memo'
 import { wagmiConfig } from '../lib/wagmi'
 import { IvmsForm, IvmsFormData } from './IvmsForm'
@@ -55,6 +55,7 @@ export function TransferPanel() {
   const [uetrParts, setUetrParts] = React.useState(['', '', '', '', ''])
   const [ivmsMode, setIvmsMode] = React.useState<IvmsMode>('form')
   const [useOnchain, setUseOnchain] = React.useState(false)
+  const [additionalInfo, setAdditionalInfo] = React.useState('')
   const [ivmsForm, setIvmsForm] = React.useState<IvmsFormData>(emptyForm)
   const [ivmsFile, setIvmsFile] = React.useState<File | null>(null)
   const [invoiceFile, setInvoiceFile] = React.useState<File | null>(null)
@@ -275,7 +276,7 @@ export function TransferPanel() {
           { addr: toAddress as `0x${string}`, iv: recipientWrapped.iv, encKey: recipientWrapped.encKey },
         ]
 
-        let regulatorPubKey = REGULATOR_PUBLIC_KEY_HEX || undefined
+        // Wrap keys for regulator if configured
         if (REGULATOR_PUBLIC_KEY_HEX && REGULATOR_ADDRESS) {
           const regulatorWrapped = await encryptDataKeyFor(
             memoId,
@@ -290,26 +291,25 @@ export function TransferPanel() {
           })
         }
 
-        const onchainMemo: OnchainEncryptedMemo = {
-          v: 1,
-          memoHash: memoId,
-          sender: address as `0x${string}`,
-          recipient: toAddress as `0x${string}`,
-          senderPubKey: senderPublic,
-          regulatorPubKey: regulatorPubKey || undefined,
-          createdAt: new Date().toISOString(),
-          contentType: 'application/json',
-          ivmsHash: memoId,
-          token: {
-            address: token.address,
-            symbol: token.symbol,
-            decimals: token.decimals,
-          },
-          amountDisplay: amount,
-          keyAlg: 'ECDH-P256',
-          kdf: 'HKDF-SHA256',
-          enc: { alg: 'AES-256-GCM', iv, ciphertext },
-          keys,
+        // Encode additional info as base64 if provided
+        let additionalInfoB64: string | undefined
+        if (additionalInfo.trim()) {
+          const infoBytes = new TextEncoder().encode(additionalInfo.trim().slice(0, MAX_ADDITIONAL_INFO_BYTES))
+          additionalInfoB64 = btoa(String.fromCharCode(...infoBytes))
+        }
+
+        // Build compact v2 memo format (~950 bytes vs ~1860 bytes for v1)
+        const onchainMemo: OnchainEncryptedMemoV2 = {
+          v: 2,
+          s: address as `0x${string}`,
+          r: toAddress as `0x${string}`,
+          t: Math.floor(Date.now() / 1000),
+          tk: token.address,
+          amt: amount,
+          ...(additionalInfoB64 && { add: additionalInfoB64 }),
+          iv,
+          ct: ciphertext,
+          k: keys.map(k => [k.iv, k.encKey]),
         }
 
         const size = onchainMemoSize(onchainMemo)
