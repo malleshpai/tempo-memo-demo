@@ -394,7 +394,7 @@ export function TransferPanel() {
         useOnchain || (senderIdentifier && recipientIdentifier)
       )
 
-      if (shouldCreateHeader) {
+      if (shouldCreateHeader && PUBLIC_MEMO_HEADER_ADDRESS) {
         setStatus('Creating public memo header…')
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
         const locatorUrl = useOnchain ? '' : `${baseUrl}/${memoId}`
