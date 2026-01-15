@@ -4,7 +4,7 @@ import React from 'react'
 import { parseUnits, isAddress, stringToHex, padHex } from 'viem'
 import { tempoTestnet } from 'viem/chains'
 import { Hooks } from 'wagmi/tempo'
-import { useConnection, usePublicClient, useWriteContract } from 'wagmi'
+import { useConnection, usePublicClient, useWriteContract, useWalletClient } from 'wagmi'
 import { waitForTransactionReceipt } from 'wagmi/actions'
 import { TOKENS, DEFAULT_TRANSFER_TOKEN } from '../lib/constants'
 import { KEY_TYPE_P256, MEMO_STORE_ADDRESS, PUBLIC_KEY_REGISTRY_ADDRESS, PUBLIC_MEMO_HEADER_ADDRESS, REGULATOR_PUBLIC_KEY_HEX, REGULATOR_ADDRESS, memoStoreAbi, publicKeyRegistryAbi, publicMemoHeaderAbi } from '../lib/contracts'
@@ -132,6 +132,7 @@ function TransactionRow({
 export function TransferPanel() {
   const { address } = useConnection()
   const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
   const { writeContractAsync } = useWriteContract()
   const tokenTransfer = Hooks.token.useTransferSync()
   const [toAddress, setToAddress] = React.useState('')
@@ -461,7 +462,7 @@ export function TransferPanel() {
 
       // ============ TX 2: Public Memo Header ============
       const shouldCreateHeader = headerReady && PUBLIC_MEMO_HEADER_ADDRESS && (useOnchain || (senderIdentifier && recipientIdentifier))
-      if (shouldCreateHeader && PUBLIC_MEMO_HEADER_ADDRESS) {
+      if (shouldCreateHeader && PUBLIC_MEMO_HEADER_ADDRESS && walletClient) {
         setTxProgress(prev => ({ ...prev, header: { status: 'sending' } }))
         const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
         const locatorUrl = useOnchain ? '' : `${baseUrl}/${memoId}`
@@ -481,12 +482,13 @@ export function TransferPanel() {
           version: MEMO_VERSION,
         }
 
-        const headerHash = await writeContractAsync({
+        // Use walletClient.writeContract directly instead of wagmi hook
+        const headerHash = await walletClient.writeContract({
           address: PUBLIC_MEMO_HEADER_ADDRESS,
           abi: publicMemoHeaderAbi,
           functionName: 'createMemoHeader',
           args: [headerParams],
-          chainId: tempoTestnet.id,
+          chain: tempoTestnet,
         })
         setTxProgress(prev => ({ ...prev, header: { status: 'sent', hash: headerHash } }))
         const headerReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: headerHash })
@@ -495,14 +497,15 @@ export function TransferPanel() {
       }
 
       // ============ TX 3: Encrypted Memo (MemoStore) ============
-      if (useOnchain && onchainMemoData && MEMO_STORE_ADDRESS) {
+      if (useOnchain && onchainMemoData && MEMO_STORE_ADDRESS && walletClient) {
         setTxProgress(prev => ({ ...prev, memo: { status: 'sending' } }))
-        const memoHash = await writeContractAsync({
+        // Use walletClient.writeContract directly instead of wagmi hook
+        const memoHash = await walletClient.writeContract({
           address: MEMO_STORE_ADDRESS,
           abi: memoStoreAbi,
           functionName: 'putMemo',
           args: [memoId, onchainMemoData.memoBytes, address as `0x${string}`, toAddress as `0x${string}`],
-          chainId: tempoTestnet.id,
+          chain: tempoTestnet,
         })
         setTxProgress(prev => ({ ...prev, memo: { status: 'sent', hash: memoHash } }))
         const memoReceipt = await waitForTransactionReceipt(wagmiConfig, { hash: memoHash })
