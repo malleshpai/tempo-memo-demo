@@ -402,12 +402,14 @@ button {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: #fff;
   font-size: 14px;
+  font-family: inherit;
 }
 
 .field-row {

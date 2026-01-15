@@ -571,6 +571,22 @@ export function TransferPanel() {
           </div>
         </label>
 
+        {useOnchain && (
+          <label className="field">
+            <span>Additional Info (optional)</span>
+            <textarea
+              value={additionalInfo}
+              onChange={(event) => setAdditionalInfo(event.target.value.slice(0, MAX_ADDITIONAL_INFO_BYTES))}
+              placeholder="Free-form notes, references, or instructions (max 128 characters)"
+              rows={2}
+              style={{ resize: 'vertical', minHeight: 60 }}
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              {additionalInfo.length}/{MAX_ADDITIONAL_INFO_BYTES} characters — stored encrypted with the memo
+            </span>
+          </label>
+        )}
+
         {ivmsMode === 'upload' ? (
           <div className="stack-sm">
             <input type="file" onChange={(event) => void onFileChange(event.target.files?.[0])} />
